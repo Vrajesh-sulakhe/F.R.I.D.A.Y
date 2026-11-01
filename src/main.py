@@ -111,6 +111,26 @@ async def get_tools():
     return {"tools": llm_manager.get_system_state()["tools"]}
 
 
+class OpenAppRequest(BaseModel):
+    app_name: str
+
+
+@app.post("/api/tools/open_app")
+async def open_mac_app(payload: OpenAppRequest):
+    """Open an installed macOS application."""
+    from src.tools.mac_apps import MacAppLauncher
+    success, resolved, msg = MacAppLauncher.open_app(payload.app_name)
+    return {"success": success, "app_name": resolved, "message": msg}
+
+
+@app.get("/api/tools/mac_apps")
+async def get_mac_apps():
+    """List detected macOS applications."""
+    from src.tools.mac_apps import MacAppLauncher
+    apps = MacAppLauncher.get_installed_apps()
+    return {"apps": sorted(list(set(apps.values())))}
+
+
 @app.post("/api/voice/switch")
 async def switch_voice(payload: VoiceSwitchRequest):
     """Dynamically switch voice profile (e.g. Jarvis, Zubar B, ElevenLabs)."""

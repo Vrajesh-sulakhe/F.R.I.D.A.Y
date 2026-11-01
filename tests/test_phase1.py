@@ -151,3 +151,22 @@ async def test_openrouter_dynamic_discovery():
     assert openrouter_info["total_models_count"] > 50
     assert openrouter_info["free_models_count"] >= 1
 
+
+def test_mac_app_launcher():
+    from src.tools.mac_apps import MacAppLauncher
+    apps = MacAppLauncher.get_installed_apps()
+    assert len(apps) > 5
+    assert "safari" in apps or "canva" in apps or "notes" in apps
+
+    # Test voice command "open Canva" or "open Notes"
+    handled, reply = llm_manager.handle_voice_or_text_command("open Canva")
+    assert handled is True
+    assert "Canva" in reply
+
+    # Test API endpoint
+    res = client.get("/api/tools/mac_apps")
+    assert res.status_code == 200
+    data = res.json()
+    assert "apps" in data
+    assert len(data["apps"]) > 5
+

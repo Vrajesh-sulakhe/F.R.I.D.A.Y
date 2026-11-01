@@ -3,126 +3,260 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FRIDAY - AI Butler Interface</title>
+  <title>FRIDAY / J.A.R.V.I.S. - Butler Intelligence</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
+
+  <!-- Three.js & OrbitControls for 3D Second Brain Galaxy Graph -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
-<body class="friday-theme">
-  <!-- Top Navigation & System HUD -->
-  <header class="hud-header">
-    <div class="hud-brand">
-      <div class="arc-reactor-icon" id="reactor-icon">
-        <div class="inner-core"></div>
-      </div>
-      <div>
-        <h1 class="system-title" id="system-title"></h1>
-        <p class="system-subtitle" id="system-subtitle"></p>
+<body class="jarvis-theme">
+
+  <!-- Fullscreen 3D Three.js Galaxy Canvas Container -->
+  <div id="graph-canvas-container" class="graph-canvas-container"></div>
+
+  <!-- Top Center View Control Pill -->
+  <div class="top-center-pill">
+    <button id="fit-graph-btn" class="pill-btn" title="Fit Galaxy to Screen">o Fit</button>
+    <button id="love-btn" class="pill-btn" title="Heuristic Core">❤️</button>
+    <button id="reset-view-btn" class="pill-btn" title="Reset Orbit">👑</button>
+  </div>
+
+  <!-- Left Sidebar Panel (Inspector, Top Hubs, Forces) -->
+  <aside class="sidebar-left">
+    <button class="back-2d-btn" id="toggle-2d-btn">&larr; Back to 2D</button>
+
+    <div class="search-brain-box">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input type="text" id="brain-search-input" placeholder="Search the brain..." autocomplete="off">
+    </div>
+
+    <!-- Inspector Card -->
+    <div class="hud-card inspector-card">
+      <div class="card-label">INSPECTOR</div>
+      <p class="inspector-desc" id="inspector-desc">
+        Click a node to focus it — only that node and its connections light up, and you can read its note here. Shift-click a second node to trace the path.
+      </p>
+      <div id="inspector-details" class="inspector-details hidden">
+        <div class="node-title-row">
+          <span class="node-badge" id="inspector-badge">Skill</span>
+          <h4 id="inspector-title">Brand Voice</h4>
+        </div>
+        <p class="node-summary" id="inspector-text">
+          Second brain knowledge node. Core tone and butler persona definitions.
+        </p>
+        <div class="inspector-meta" id="inspector-meta">Hub: Skill Suites · 18 Connections</div>
       </div>
     </div>
 
-    <!-- Active Brain & Voice Badges (100% Dynamically Loaded) -->
-    <div class="hud-status-cluster">
-      <div class="status-badge" id="brain-badge" title="Active Brain Engine">
-        <span class="badge-dot pulse-cyan" id="brain-dot"></span>
-        <span class="badge-label">Brain:</span>
-        <span class="badge-value" id="active-brain-text"></span>
+    <!-- Top Hubs Card -->
+    <div class="hud-card top-hubs-card">
+      <div class="card-label">TOP HUBS</div>
+      <div id="hubs-list" class="hubs-list">
+        <!-- Dynamically rendered via JS -->
+      </div>
+    </div>
+
+    <!-- Forces Physics Sliders -->
+    <div class="hud-card forces-card">
+      <div class="card-label">FORCES</div>
+      <div class="force-slider-row">
+        <label>Repel</label>
+        <input type="range" id="repel-slider" min="0.2" max="3" step="0.1" value="1.0">
+      </div>
+      <div class="force-slider-row">
+        <label>Link length</label>
+        <input type="range" id="link-slider" min="0.2" max="3" step="0.1" value="1.0">
+      </div>
+    </div>
+
+    <div class="controls-legend">
+      drag = orbit · scroll = zoom · shift-click = path · l = isolate
+    </div>
+  </aside>
+
+  <!-- Right Sidebar Panel (Filter, Circular J.A.R.V.I.S. Reactor HUD, Toggles) -->
+  <aside class="sidebar-right">
+    <!-- Filter Card -->
+    <div class="hud-card filter-card">
+      <div class="card-label">FILTER</div>
+      <div class="filter-items-list" id="filter-items-list">
+        <!-- Rendered with count dots matching screenshot -->
+      </div>
+    </div>
+
+    <!-- Iconic J.A.R.V.I.S. Arc Reactor HUD -->
+    <div class="jarvis-reactor-container">
+      <div class="reactor-outer-ring" id="reactor-ring">
+        <div class="reactor-inner-ticks"></div>
+        <canvas id="voice-wave-canvas" class="voice-wave-canvas" width="160" height="160"></canvas>
+        <div class="reactor-center-text">
+          <span class="reactor-logo-text">J.A.R.V.I.S.</span>
+        </div>
       </div>
 
-      <div class="status-badge" id="voice-badge" title="Active Voice Profile">
-        <span class="badge-dot pulse-amber" id="voice-dot"></span>
-        <span class="badge-label">Voice:</span>
-        <span class="badge-value" id="active-voice-text"></span>
+      <!-- Live Voice & Brain Indicators -->
+      <div class="reactor-badges-row">
+        <button id="mic-toggle-btn" class="reactor-badge mic-badge" title="Click to toggle microphone listening">
+          <span class="badge-dot pulse-emerald" id="mic-dot"></span>
+          <span id="mic-status-text">LISTENING</span>
+        </button>
+
+        <div class="reactor-badge model-badge" id="hud-model-badge" title="Active Brain Engine">
+          <span class="badge-dot pulse-cyan"></span>
+          <span id="hud-model-text">QWEN 3.5 9B</span>
+        </div>
       </div>
 
-      <button id="open-settings-btn" class="hud-btn" title="Provider, Voice & System Settings">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-        <span>Settings</span>
-      </button>
-    </div>
-  </header>
+      <!-- Mode Selector Pills -->
+      <div class="mode-pills-row">
+        <button class="mode-pill active" data-mode="ring">RING</button>
+        <button class="mode-pill" data-mode="cube">CUBE</button>
+        <button class="mode-pill" data-mode="face">FACE</button>
+      </div>
 
-  <!-- Live Dynamic Status Bar -->
-  <div class="activity-bar">
-    <div class="activity-indicator">
-      <span class="status-scan-line"></span>
-      <span class="activity-label">STATUS:</span>
-      <span id="live-status-text" class="activity-text"></span>
+      <!-- Speech / Status Ticker -->
+      <div class="reactor-status-ticker">
+        <span class="status-pulse-dot"></span>
+        <span id="reactor-substatus">listening...</span>
+      </div>
     </div>
-    <div id="metric-ticker" class="metric-ticker">
-      <span id="metric-latency">Latency: --</span>
-      <span class="metric-sep">|</span>
-      <span id="metric-tokens">Tokens: --</span>
-      <span class="metric-sep">|</span>
-      <span id="metric-cost">Cost: --</span>
+
+    <!-- HUD Toggles Card -->
+    <div class="hud-card toggles-card">
+      <div class="toggle-row">
+        <span class="toggle-name">EYES</span>
+        <button class="toggle-switch-btn" data-toggle="eyes">off</button>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-name">WATCH</span>
+        <button class="toggle-switch-btn" data-toggle="watch">off</button>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-name">HOLO</span>
+        <button class="toggle-switch-btn active" data-toggle="holo">on</button>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-name">FOCUS</span>
+        <button class="toggle-switch-btn" data-toggle="focus">off</button>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-name">REFLEX</span>
+        <span class="toggle-status-dim">hidden</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Side Reading Panel (Sliding Dossier Viewer) -->
+  <aside id="reading-panel" class="reading-panel hidden">
+    <div class="reading-panel-header">
+      <div class="panel-title-group">
+        <span class="reading-tag">DETAILED DOSSIER</span>
+        <h3 id="panel-title">Report Viewer</h3>
+      </div>
+      <div class="panel-header-actions">
+        <button id="read-aloud-btn" class="panel-action-btn" title="Read this dossier aloud">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+          <span>Read Aloud</span>
+        </button>
+        <button id="close-reading-panel-btn" class="panel-close-btn">&times;</button>
+      </div>
+    </div>
+    <div id="panel-content" class="reading-panel-content"></div>
+  </aside>
+
+  <!-- Bottom Floating Command Bar & Dock -->
+  <div class="bottom-floating-dock">
+    <!-- Live Conversation Transcript Stream (Minimizable floating overlay) -->
+    <div id="messages-stream" class="chat-floating-stream">
+      <!-- Injected dynamically on greeting & responses -->
+    </div>
+
+    <div class="dock-row">
+      <!-- Input Pill -->
+      <form id="chat-form" class="dock-input-pill">
+        <input 
+          type="text" 
+          id="user-input" 
+          placeholder='Ask: "remind me..." · "good morning" · "open Canva" · "open Safari" · "teardown igloo.inc"'
+          autocomplete="off"
+        >
+        <button type="submit" class="dock-send-btn" title="Transmit command">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </form>
+
+      <!-- Tools & Microphone Dock Pill -->
+      <div class="dock-tools-pill">
+        <!-- Microphone Voice Button -->
+        <button id="dock-mic-btn" class="dock-tool-btn mic-btn" title="Voice Input (Microphone)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+        </button>
+
+        <!-- REA Teardown -->
+        <button class="dock-tool-btn" id="tool-rea-btn" title="Reverse Engineer Website (REA)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+        </button>
+
+        <!-- Mac App Launcher / Canva -->
+        <button class="dock-tool-btn" id="tool-canva-btn" title="Launch Canva or Mac Apps">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </button>
+
+        <!-- Google Calendar -->
+        <button class="dock-tool-btn" id="tool-calendar-btn" title="Google Calendar">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+        </button>
+
+        <!-- Gmail -->
+        <button class="dock-tool-btn" id="tool-gmail-btn" title="Gmail">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+        </button>
+
+        <!-- Settings Modal Button -->
+        <button class="dock-tool-btn" id="open-settings-btn" title="Providers & Voice Settings">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 
-  <!-- Main View Area with Workspace and Side Reading Panel -->
-  <div class="workspace-wrapper">
-    <main class="main-container">
-      <section class="conversation-panel">
-        <!-- Messages Stream (100% Dynamically Rendered) -->
-        <div id="messages-stream" class="messages-stream"></div>
-
-        <!-- Dynamic Quick Command Suggestions -->
-        <div class="quick-commands-bar" id="quick-commands-container"></div>
-
-        <!-- Command Input Bar -->
-        <form id="chat-form" class="chat-input-bar">
-          <input 
-            type="text" 
-            id="user-input" 
-            placeholder="Speak or transmit a command, sir..." 
-            autocomplete="off"
-            required
-          >
-          <button type="submit" id="send-btn" class="send-button">
-            <span>Transmit</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-          </button>
-        </form>
-      </section>
-    </main>
-
-    <!-- Side Reading Panel for Detailed Reports & Teardowns -->
-    <aside id="reading-panel" class="reading-panel hidden">
-      <div class="reading-panel-header">
-        <div class="panel-title-group">
-          <span class="reading-tag">DETAILED DOSSIER</span>
-          <h3 id="panel-title">Report Viewer</h3>
-        </div>
-        <div class="panel-header-actions">
-          <button id="read-aloud-btn" class="panel-action-btn" title="Read this dossier aloud">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-            </svg>
-            <span>Read Aloud</span>
-          </button>
-          <button id="close-reading-panel-btn" class="panel-close-btn">&times;</button>
-        </div>
-      </div>
-      <div id="panel-content" class="reading-panel-content"></div>
-    </aside>
-  </div>
-
-  <!-- Dynamic Bottom Tools Bar -->
-  <footer class="tools-bar-container">
-    <div class="tools-bar-label">CONNECTED TOOLS:</div>
-    <div id="tools-chips-list" class="tools-chips-list">
-      <!-- Populated dynamically via JS -->
-    </div>
-  </footer>
-
-  <!-- Provider, Voice & Settings Modal -->
+  <!-- Settings Modal (Brain Providers, OpenRouter Model Catalog, Voices) -->
   <div id="settings-modal" class="modal-backdrop hidden">
     <div class="modal-card">
       <div class="modal-header">
@@ -130,7 +264,6 @@
         <button id="close-settings-btn" class="modal-close">&times;</button>
       </div>
       <div class="modal-body">
-        <!-- Voice Profile Selector -->
         <div class="settings-section">
           <h3>Active Voice Profile</h3>
           <p class="section-desc">Select active voice output profile (Local Voice Studio or Cloud ElevenLabs).</p>
@@ -140,13 +273,10 @@
           </div>
         </div>
 
-        <!-- Providers List -->
         <div class="settings-section">
           <h3>Brain Providers & Endpoints</h3>
-          <p class="section-desc">Manage LLM engines, discover models, and safely set keys.</p>
-          <div id="providers-list" class="providers-list">
-            <!-- Dynamically populated -->
-          </div>
+          <p class="section-desc">Manage LLM engines, dynamic models catalog, and API keys.</p>
+          <div id="providers-list" class="providers-list"></div>
         </div>
 
         <div class="settings-actions">
@@ -156,6 +286,8 @@
     </div>
   </div>
 
+  <!-- Scripts -->
+  <script src="/static/js/graph.js"></script>
   <script src="/static/js/app.js"></script>
 </body>
 </html>

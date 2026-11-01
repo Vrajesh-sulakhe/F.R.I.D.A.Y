@@ -233,15 +233,18 @@ class LLMManager:
             {"label": "Local voice: Jarvis", "command": "Switch to your local voice"},
             {"label": "Local voice: Zubar B", "command": "Switch your voice to Zubar B"},
             {"label": "How do you feel locally?", "command": "How do you feel running locally?"},
+            {"label": "Open Canva", "command": "open Canva"},
+            {"label": "Open Safari", "command": "open Safari"},
             {"label": "Check Calendar", "command": "FRIDAY, what meetings do I have tomorrow?"},
             {"label": "Pull Brand Voice", "command": "FRIDAY, can you pull up my brand voice?"},
         ]
 
         # Dynamic tools status
         tools_list = [
+            {"id": "mac_apps", "name": "Mac App Launcher", "status": "active", "icon": "cpu"},
+            {"id": "canva", "name": "Canva", "status": "connected", "icon": "palette"},
             {"id": "calendar", "name": "Google Calendar", "status": "connected", "icon": "calendar"},
             {"id": "gmail", "name": "Gmail", "status": "connected", "icon": "mail"},
-            {"id": "canva", "name": "Canva", "status": "connected", "icon": "palette"},
             {"id": "rea", "name": "REA Teardown", "status": "ready", "icon": "activity"},
             {"id": "second_brain", "name": "Second Brain", "status": "ready", "icon": "database"},
         ]
@@ -407,6 +410,19 @@ class LLMManager:
         if "switch to cloud voice" in text or "switch to elevenlabs" in text:
             self.set_active_voice("Jarvis (ElevenLabs)", "elevenlabs")
             return True, "Cloud voice engaged, sir. Crisp and ready."
+
+        # Mac App Launcher command: "open <app>", "launch <app>", "can you open <app>"
+        app_match = re.search(r"(?:can you open|open up|open|launch|start|run)\s+([a-zA-Z0-9_\-\.\s]+)", text)
+        if app_match and not any(k in text for k in ["local", "cloud", "brain", "voice", "model", "site", "openrouter", "teardown", "reverse engineer"]):
+            target_app = app_match.group(1).strip()
+            target_app = re.sub(r"\b(the|for me|app|please)\b", "", target_app).strip()
+            if target_app:
+                from src.tools.mac_apps import MacAppLauncher
+                success, resolved, msg = MacAppLauncher.open_app(target_app)
+                if success:
+                    return True, f"Opening {resolved} for you, sir. Right away."
+                else:
+                    return True, f"I attempted to launch {resolved}, sir, but macOS reported: {msg}"
 
         # Explicit model switch: "use model <name>" or "switch model to <name>"
         model_switch_match = re.search(r"(?:use model|switch model to|use)\s+([a-zA-Z0-9_\-\.\:\/]+)", text)

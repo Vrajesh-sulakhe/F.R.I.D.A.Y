@@ -1,5 +1,5 @@
 /**
- * FRIDAY Web Client - 100% Dynamically Rendered AI Assistant Interface
+ * FRIDAY Web Client - Voice Controller, Three.js 3D Second Brain & Mac App Tools
  */
 
 class FridayClient {
@@ -8,59 +8,358 @@ class FridayClient {
     this.systemState = null;
     this.socket = null;
     this.isStreaming = false;
-    this.currentStreamContentDiv = null;
-    this.currentAccumulatedText = "";
+
+    // Speech Recognition & Synthesis
+    this.recognition = null;
+    this.isListening = false;
+    this.synth = window.speechSynthesis;
+    this.waveAnimId = null;
 
     // DOM Elements
-    this.systemTitle = document.getElementById("system-title");
-    this.systemSubtitle = document.getElementById("system-subtitle");
-    this.brainBadge = document.getElementById("active-brain-text");
-    this.voiceBadge = document.getElementById("active-voice-text");
-    this.liveStatus = document.getElementById("live-status-text");
-    this.latencyMetric = document.getElementById("metric-latency");
-    this.tokensMetric = document.getElementById("metric-tokens");
-    this.costMetric = document.getElementById("metric-cost");
+    this.graphContainer = document.getElementById("graph-canvas-container");
     this.messagesStream = document.getElementById("messages-stream");
-    this.quickCommandsContainer = document.getElementById("quick-commands-container");
-    this.toolsChipsList = document.getElementById("tools-chips-list");
     this.chatForm = document.getElementById("chat-form");
     this.userInput = document.getElementById("user-input");
-    this.settingsModal = document.getElementById("settings-modal");
-    this.providersList = document.getElementById("providers-list");
-    this.voicePickerSelect = document.getElementById("voice-picker-select");
-    this.applyVoiceBtn = document.getElementById("apply-voice-btn");
+    this.micToggleBtn = document.getElementById("mic-toggle-btn");
+    this.dockMicBtn = document.getElementById("dock-mic-btn");
+    this.micDot = document.getElementById("mic-dot");
+    this.micStatusText = document.getElementById("mic-status-text");
+    this.reactorSubstatus = document.getElementById("reactor-substatus");
+    this.hudModelText = document.getElementById("hud-model-text");
+    this.waveCanvas = document.getElementById("voice-wave-canvas");
+    this.waveCtx = this.waveCanvas ? this.waveCanvas.getContext("2d") : null;
+
+    // Inspector & Left Sidebar
+    this.inspectorDetails = document.getElementById("inspector-details");
+    this.inspectorDesc = document.getElementById("inspector-desc");
+    this.inspectorBadge = document.getElementById("inspector-badge");
+    this.inspectorTitle = document.getElementById("inspector-title");
+    this.inspectorText = document.getElementById("inspector-text");
+    this.inspectorMeta = document.getElementById("inspector-meta");
+    this.hubsList = document.getElementById("hubs-list");
+    this.filterItemsList = document.getElementById("filter-items-list");
+    this.brainSearchInput = document.getElementById("brain-search-input");
+
+    // Reading Panel
     this.readingPanel = document.getElementById("reading-panel");
     this.panelTitle = document.getElementById("panel-title");
     this.panelContent = document.getElementById("panel-content");
     this.readAloudBtn = document.getElementById("read-aloud-btn");
     this.closeReadingPanelBtn = document.getElementById("close-reading-panel-btn");
 
+    // Settings Modal
+    this.settingsModal = document.getElementById("settings-modal");
+    this.providersList = document.getElementById("providers-list");
+    this.voicePickerSelect = document.getElementById("voice-picker-select");
+    this.applyVoiceBtn = document.getElementById("apply-voice-btn");
+
     this.init();
   }
 
   async init() {
+    this.init3DGalaxyGraph();
+    this.initSpeechRecognition();
     this.bindEvents();
-    // 1. Fetch fresh session to reset state on load/refresh
+    this.startReactorWaveAnimation();
     await this.fetchFreshSession();
-    // 2. Connect WebSocket for real-time telemetry
     this.connectWebSocket();
   }
 
+  init3DGalaxyGraph() {
+    if (window.GalaxyGraph) {
+      this.galaxy = new GalaxyGraph("graph-canvas-container", (nodeData) => {
+        this.displayNodeInInspector(nodeData);
+      });
+      this.renderHubsList();
+      this.renderFilterList();
+    }
+  }
+
+  renderHubsList() {
+    if (!this.hubsList || !this.galaxy) return;
+    this.hubsList.innerHTML = "";
+
+    this.galaxy.hubs.forEach((hub) => {
+      const row = document.createElement("div");
+      row.className = "hub-item-row";
+
+      const hex = "#" + hub.color.toString(16).padStart(6, "0");
+      row.innerHTML = `
+        <div class="hub-name-group">
+          <span class="hub-color-dot" style="background:${hex}; box-shadow:0 0 6px ${hex};"></span>
+          <span>${hub.name}</span>
+        </div>
+        <span class="hub-count">${hub.count}</span>
+      `;
+
+      row.addEventListener("click", () => {
+        this.galaxy.focusHub(hub.name);
+        this.userInput.value = `FRIDAY, pull up ${hub.name}`;
+      });
+
+      this.hubsList.appendChild(row);
+    });
+  }
+
+  renderFilterList() {
+    if (!this.filterItemsList || !this.galaxy) return;
+    this.filterItemsList.innerHTML = "";
+
+    Object.entries(this.galaxy.categories).forEach(([name, data]) => {
+      const row = document.createElement("div");
+      row.className = "filter-item-row";
+
+      const hex = "#" + data.color.toString(16).padStart(6, "0");
+      row.innerHTML = `
+        <div class="filter-cat-group">
+          <span class="hub-color-dot" style="background:${hex}; box-shadow:0 0 5px ${hex};"></span>
+          <span>${name}</span>
+        </div>
+        <span class="filter-count">${data.count}</span>
+      `;
+
+      row.addEventListener("click", () => {
+        this.galaxy.highlightByQuery(name);
+      });
+
+      this.filterItemsList.appendChild(row);
+    });
+  }
+
+  displayNodeInInspector(node) {
+    if (!this.inspectorDetails) return;
+    this.inspectorDesc.style.display = "none";
+    this.inspectorDetails.classList.remove("hidden");
+
+    this.inspectorBadge.textContent = node.type || "Node";
+    this.inspectorTitle.textContent = node.name || "Untitled";
+    this.inspectorText.textContent = node.summary || "No notes attached.";
+    this.inspectorMeta.textContent = `${node.hub ? 'Hub: ' + node.hub : 'Cluster Core'} · ${node.category || 'General'}`;
+  }
+
+  initSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("Speech Recognition API not supported in this browser.");
+      if (this.micStatusText) this.micStatusText.textContent = "NO MIC API";
+      return;
+    }
+
+    try {
+      this.recognition = new SpeechRecognition();
+      this.recognition.continuous = true;
+      this.recognition.interimResults = true;
+      this.recognition.lang = "en-US";
+
+      this.recognition.onstart = () => {
+        this.isListening = true;
+        this.updateListeningUI(true);
+      };
+
+      this.recognition.onresult = (event) => {
+        let interimTranscript = "";
+        let finalTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+
+        const currentText = (finalTranscript || interimTranscript).trim();
+        if (currentText) {
+          this.userInput.value = currentText;
+          this.reactorSubstatus.textContent = `heard: "${currentText.slice(-20)}"`;
+        }
+
+        if (finalTranscript) {
+          this.handleUserSubmit();
+        }
+      };
+
+      this.recognition.onerror = (e) => {
+        console.warn("Speech recognition error:", e.error);
+        if (e.error !== "no-speech") {
+          this.stopListening();
+        }
+      };
+
+      this.recognition.onend = () => {
+        if (this.isListening) {
+          // Restart if still marked as listening
+          try { this.recognition.start(); } catch (err) {}
+        } else {
+          this.updateListeningUI(false);
+        }
+      };
+    } catch (e) {
+      console.warn("Failed to initialize speech recognition:", e);
+    }
+  }
+
+  toggleListening() {
+    if (!this.recognition) {
+      alert("Microphone recognition requires Chrome, Brave, or Safari with microphone permissions granted.");
+      return;
+    }
+    if (this.isListening) {
+      this.stopListening();
+    } else {
+      this.startListening();
+    }
+  }
+
+  startListening() {
+    if (!this.recognition) return;
+    this.isListening = true;
+    try {
+      this.recognition.start();
+    } catch (e) {
+      // already started
+    }
+    this.updateListeningUI(true);
+  }
+
+  stopListening() {
+    this.isListening = false;
+    if (this.recognition) {
+      try { this.recognition.stop(); } catch (e) {}
+    }
+    this.updateListeningUI(false);
+  }
+
+  updateListeningUI(listening) {
+    if (listening) {
+      if (this.micStatusText) this.micStatusText.textContent = "LISTENING";
+      if (this.micDot) this.micDot.className = "badge-dot pulse-emerald";
+      if (this.dockMicBtn) this.dockMicBtn.classList.add("active");
+      if (this.reactorSubstatus) this.reactorSubstatus.textContent = "listening...";
+    } else {
+      if (this.micStatusText) this.micStatusText.textContent = "CLICK TO TALK";
+      if (this.micDot) this.micDot.className = "badge-dot pulse-cyan";
+      if (this.dockMicBtn) this.dockMicBtn.classList.remove("active");
+      if (this.reactorSubstatus) this.reactorSubstatus.textContent = "standing by, sir.";
+    }
+  }
+
+  speakResponse(text) {
+    if (!this.synth) return;
+    try {
+      this.synth.cancel(); // Stop prior speech
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.05;
+      utterance.pitch = 0.95;
+
+      // Prefer British / Jarvis style voice if available
+      const voices = this.synth.getVoices();
+      const ukVoice = voices.find(v => v.lang.includes("en-GB") || v.name.includes("Daniel") || v.name.includes("Oliver"));
+      if (ukVoice) utterance.voice = ukVoice;
+
+      utterance.onstart = () => {
+        this.reactorSubstatus.textContent = "speaking, sir...";
+      };
+      utterance.onend = () => {
+        this.reactorSubstatus.textContent = this.isListening ? "listening..." : "standing by, sir.";
+      };
+
+      this.synth.speak(utterance);
+    } catch (e) {
+      console.warn("Speech synthesis error:", e);
+    }
+  }
+
+  startReactorWaveAnimation() {
+    if (!this.waveCanvas || !this.waveCtx) return;
+
+    let phase = 0;
+    const draw = () => {
+      this.waveAnimId = requestAnimationFrame(draw);
+      this.waveCtx.clearRect(0, 0, this.waveCanvas.width, this.waveCanvas.height);
+
+      const centerX = this.waveCanvas.width / 2;
+      const centerY = this.waveCanvas.height / 2;
+      const baseRadius = 54;
+      const waveCount = 3;
+
+      phase += 0.04;
+      const activeFactor = (this.isListening || this.synth.speaking) ? 1.8 : 0.4;
+
+      for (let w = 0; w < waveCount; w++) {
+        this.waveCtx.beginPath();
+        this.waveCtx.strokeStyle = this.isListening ? `rgba(16, 185, 129, ${0.4 - w * 0.1})` : `rgba(56, 189, 248, ${0.35 - w * 0.1})`;
+        this.waveCtx.lineWidth = 1.5;
+
+        for (let angle = 0; angle <= Math.PI * 2; angle += 0.1) {
+          const distortion = Math.sin(angle * 6 + phase + w) * (3.5 * activeFactor);
+          const r = baseRadius + distortion + w * 4;
+          const x = centerX + Math.cos(angle) * r;
+          const y = centerY + Math.sin(angle) * r;
+          if (angle === 0) {
+            this.waveCtx.moveTo(x, y);
+          } else {
+            this.waveCtx.lineTo(x, y);
+          }
+        }
+        this.waveCtx.closePath();
+        this.waveCtx.stroke();
+      }
+    };
+    draw();
+  }
+
   bindEvents() {
-    // Chat submit
+    // Form submit
     this.chatForm.addEventListener("submit", (e) => {
       e.preventDefault();
       this.handleUserSubmit();
     });
 
+    // Mic button toggles
+    if (this.micToggleBtn) {
+      this.micToggleBtn.addEventListener("click", () => this.toggleListening());
+    }
+    if (this.dockMicBtn) {
+      this.dockMicBtn.addEventListener("click", () => this.toggleListening());
+    }
+
+    // Brain search input
+    if (this.brainSearchInput) {
+      this.brainSearchInput.addEventListener("input", (e) => {
+        if (this.galaxy) this.galaxy.highlightByQuery(e.target.value);
+      });
+    }
+
+    // Tool icons in dock
+    document.getElementById("tool-canva-btn")?.addEventListener("click", async () => {
+      this.userInput.value = "open Canva";
+      this.handleUserSubmit();
+    });
+
+    document.getElementById("tool-calendar-btn")?.addEventListener("click", () => {
+      this.userInput.value = "FRIDAY, what meetings do I have tomorrow?";
+      this.handleUserSubmit();
+    });
+
+    document.getElementById("tool-gmail-btn")?.addEventListener("click", () => {
+      this.userInput.value = "open Mail";
+      this.handleUserSubmit();
+    });
+
+    document.getElementById("tool-rea-btn")?.addEventListener("click", () => {
+      this.userInput.value = "FRIDAY, can you reverse engineer igloo.inc for me?";
+      this.handleUserSubmit();
+    });
+
     // Settings modal open/close
-    document.getElementById("open-settings-btn").addEventListener("click", () => {
+    document.getElementById("open-settings-btn")?.addEventListener("click", () => {
       this.openSettingsModal();
     });
-    document.getElementById("close-settings-btn").addEventListener("click", () => {
+    document.getElementById("close-settings-btn")?.addEventListener("click", () => {
       this.closeSettingsModal();
     });
-    document.getElementById("refresh-providers-btn").addEventListener("click", () => {
+    document.getElementById("refresh-providers-btn")?.addEventListener("click", () => {
       this.loadProvidersSettings();
     });
     this.settingsModal.addEventListener("click", (e) => {
@@ -68,20 +367,28 @@ class FridayClient {
     });
 
     // Apply voice button
-    this.applyVoiceBtn.addEventListener("click", () => {
+    this.applyVoiceBtn?.addEventListener("click", () => {
       const selectedVoice = this.voicePickerSelect.value;
-      if (selectedVoice) {
-        this.switchVoice(selectedVoice);
-      }
+      if (selectedVoice) this.switchVoice(selectedVoice);
     });
 
     // Reading panel controls
-    this.closeReadingPanelBtn.addEventListener("click", () => {
-      this.closeReadingPanel();
+    this.closeReadingPanelBtn?.addEventListener("click", () => this.closeReadingPanel());
+    this.readAloudBtn?.addEventListener("click", () => {
+      const textToRead = this.panelContent.textContent;
+      if (textToRead) this.speakResponse(textToRead);
     });
-    this.readAloudBtn.addEventListener("click", () => {
-      this.userInput.value = "read it out loud";
-      this.handleUserSubmit();
+
+    // HUD Toggles (Eyes, Watch, Holo, Focus)
+    document.querySelectorAll(".toggle-switch-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const toggleName = btn.getAttribute("data-toggle");
+        const isActive = btn.classList.toggle("active");
+        btn.textContent = isActive ? "on" : "off";
+        if (toggleName === "holo" && this.galaxy) {
+          this.galaxy.nodeGroup.visible = isActive;
+        }
+      });
     });
   }
 
@@ -93,7 +400,7 @@ class FridayClient {
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
-        this.updateStatus("Neural telemetry link active. Standing by, sir.");
+        this.reactorSubstatus.textContent = "online. standing by.";
       };
 
       this.socket.onmessage = (event) => {
@@ -102,15 +409,11 @@ class FridayClient {
       };
 
       this.socket.onclose = () => {
-        this.updateStatus("Link interrupted. Reconnecting in 3s...");
+        this.reactorSubstatus.textContent = "reconnecting...";
         setTimeout(() => this.connectWebSocket(), 3000);
       };
-
-      this.socket.onerror = (err) => {
-        console.warn("WebSocket error, falling back to HTTP endpoints:", err);
-      };
     } catch (e) {
-      console.warn("WebSocket initialization failed:", e);
+      console.warn("WebSocket init failed:", e);
     }
   }
 
@@ -120,14 +423,13 @@ class FridayClient {
       if (res.ok) {
         const data = await res.json();
         this.applyDynamicState(data.state);
-        // Clear messages and inject initial greeting dynamically
-        this.messagesStream.innerHTML = "";
         this.appendMessage("assistant", data.greeting);
         this.sessionHistory = [{ role: "assistant", content: data.greeting }];
-        this.updateStatus("System initialized. Standing by, sir.");
+        // Speak initial greeting
+        this.speakResponse(data.greeting);
       }
     } catch (e) {
-      console.error("Failed to fetch fresh session:", e);
+      console.error("Fresh session failed:", e);
     }
   }
 
@@ -135,36 +437,12 @@ class FridayClient {
     if (!state) return;
     this.systemState = state;
 
-    // 1. Identity & Titles
-    if (state.identity) {
-      this.systemTitle.textContent = state.identity.title || "F.R.I.D.A.Y.";
-      this.systemSubtitle.textContent = state.identity.subtitle || "Butler Intelligence";
+    if (state.brain && this.hudModelText) {
+      this.hudModelText.textContent = `${state.brain.model.toUpperCase()}`;
     }
 
-    // 2. Brain Badge
-    if (state.brain) {
-      this.brainBadge.textContent = `${state.brain.provider_name} / ${state.brain.model}`;
-      const brainDot = document.getElementById("brain-dot");
-      if (brainDot) {
-        brainDot.className = state.brain.is_local ? "badge-dot pulse-cyan" : "badge-dot pulse-amber";
-      }
-    }
-
-    // 3. Voice Badge
-    if (state.voice) {
-      this.voiceBadge.textContent = state.voice.voice_name;
-      // Populate voice picker select if empty
+    if (state.voice && this.voicePickerSelect) {
       this.renderVoicePicker(state.voice.available_voices, state.voice.voice_name);
-    }
-
-    // 4. Dynamic Quick Commands Chips
-    if (state.quick_commands) {
-      this.renderQuickCommands(state.quick_commands);
-    }
-
-    // 5. Dynamic Tools Bar
-    if (state.tools) {
-      this.renderToolsBar(state.tools);
     }
   }
 
@@ -180,97 +458,19 @@ class FridayClient {
     });
   }
 
-  renderQuickCommands(commands) {
-    this.quickCommandsContainer.innerHTML = "";
-    const label = document.createElement("span");
-    label.className = "quick-label";
-    label.textContent = "Dynamic Commands:";
-    this.quickCommandsContainer.appendChild(label);
-
-    commands.forEach((item) => {
-      const btn = document.createElement("button");
-      btn.className = "cmd-chip";
-      btn.textContent = item.label;
-      btn.setAttribute("data-cmd", item.command);
-      btn.addEventListener("click", () => {
-        this.userInput.value = item.command;
-        this.handleUserSubmit();
-      });
-      this.quickCommandsContainer.appendChild(btn);
-    });
-  }
-
-  renderToolsBar(tools) {
-    this.toolsChipsList.innerHTML = "";
-    tools.forEach((tool) => {
-      const chip = document.createElement("div");
-      chip.className = "tool-chip";
-      chip.title = `Tool: ${tool.name} (${tool.status})`;
-
-      chip.innerHTML = `
-        <span class="tool-status-dot"></span>
-        <span class="tool-name">${tool.name}</span>
-        <span class="tool-status-text">[${tool.status}]</span>
-      `;
-
-      chip.addEventListener("click", () => {
-        if (tool.id === "calendar") {
-          this.userInput.value = "FRIDAY, what meetings do I have tomorrow?";
-          this.handleUserSubmit();
-        } else if (tool.id === "rea") {
-          this.userInput.value = "FRIDAY, can you reverse engineer igloo.inc for me?";
-          this.handleUserSubmit();
-        } else if (tool.id === "second_brain") {
-          this.userInput.value = "FRIDAY, can you pull up my brand voice?";
-          this.handleUserSubmit();
-        } else {
-          this.updateStatus(`Tool selected: ${tool.name}. Reaching for tools...`);
-        }
-      });
-
-      this.toolsChipsList.appendChild(chip);
-    });
-  }
-
-  updateStatus(text) {
-    this.liveStatus.textContent = text;
-  }
-
-  updateMetrics(latencyMs, tokens, cost) {
-    if (latencyMs !== undefined) this.latencyMetric.textContent = `Latency: ${latencyMs.toFixed(0)} ms`;
-    if (tokens !== undefined) this.tokensMetric.textContent = `Tokens: ${tokens}`;
-    if (cost !== undefined) this.costMetric.textContent = `Cost: $${cost.toFixed(4)}`;
-  }
-
   appendMessage(role, content) {
-    const wrapper = document.createElement("div");
-    wrapper.className = `message-wrapper ${role}`;
+    const msg = document.createElement("div");
+    msg.className = `floating-msg ${role}`;
+    msg.textContent = `${role === 'assistant' ? 'FRIDAY: ' : 'You: '} ${content}`;
 
-    const avatar = document.createElement("div");
-    avatar.className = role === "assistant" ? "avatar-jarvis" : "avatar-user";
-    avatar.textContent = role === "assistant" ? "F" : "U";
-
-    const body = document.createElement("div");
-    body.className = "message-body";
-
-    const header = document.createElement("div");
-    header.className = "message-header";
-    const speaker = role === "assistant" ? (this.systemState?.identity?.name || "FRIDAY") : "Sir";
-    header.innerHTML = `<span>${speaker}</span> <span class="time-stamp">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>`;
-
-    const contentDiv = document.createElement("div");
-    contentDiv.className = "message-content";
-    contentDiv.textContent = content;
-
-    body.appendChild(header);
-    body.appendChild(contentDiv);
-    wrapper.appendChild(avatar);
-    wrapper.appendChild(body);
-
-    this.messagesStream.appendChild(wrapper);
+    this.messagesStream.appendChild(msg);
     this.messagesStream.scrollTop = this.messagesStream.scrollHeight;
 
-    return contentDiv;
+    // Prune old floating messages
+    while (this.messagesStream.children.length > 5) {
+      this.messagesStream.removeChild(this.messagesStream.firstChild);
+    }
+    return msg;
   }
 
   openReadingPanel(title, content) {
@@ -290,18 +490,36 @@ class FridayClient {
     this.userInput.value = "";
     this.appendMessage("user", text);
     this.sessionHistory.push({ role: "user", content: text });
+    this.reactorSubstatus.textContent = "computing, sir...";
 
-    // Dynamic status text for tools or general queries
-    if (text.toLowerCase().includes("calendar") || text.toLowerCase().includes("meetings")) {
-      this.updateStatus("Let me see if I have the tools for that, sir.");
-      setTimeout(() => this.updateStatus("Reaching for tools..."), 600);
-    } else if (text.toLowerCase().includes("reverse engineer") || text.toLowerCase().includes("teardown")) {
-      this.updateStatus("Opening site in clean browser while REA takes it apart...");
-    } else {
-      this.updateStatus("Cognitive core engaged...");
+    // Highlight 3D graph if query matches keywords
+    if (this.galaxy) {
+      this.galaxy.highlightByQuery(text);
     }
 
-    // Transmit via WebSocket if connected
+    // Direct Mac App Launcher check
+    const lower = text.toLowerCase();
+    if (lower.startsWith("open ") || lower.startsWith("launch ")) {
+      const appName = text.replace(/^(open|launch)\s+/i, "").trim();
+      const appRes = await fetch("/api/tools/open_app", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ app_name: appName }),
+      });
+      if (appRes.ok) {
+        const appData = await appRes.json();
+        const reply = appData.success
+          ? `Opening ${appData.app_name} for you, sir. Right away.`
+          : `I attempted to launch ${appData.app_name}, sir, but macOS encountered an issue: ${appData.message}`;
+        this.appendMessage("assistant", reply);
+        this.sessionHistory.push({ role: "assistant", content: reply });
+        this.speakResponse(reply);
+        this.reactorSubstatus.textContent = `Tool run: ${appData.app_name}`;
+        return;
+      }
+    }
+
+    // Send via WebSocket or HTTP
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.isStreaming = true;
       this.socket.send(JSON.stringify({
@@ -335,18 +553,24 @@ class FridayClient {
       this.appendMessage("assistant", data.reply);
       this.sessionHistory.push({ role: "assistant", content: data.reply });
 
-      // Refresh dynamic state
+      // Speak aloud in voice
+      this.speakResponse(data.reply);
+
+      // Open reading panel if long report
+      if (data.reply.length > 350) {
+        this.openReadingPanel("Detailed Analysis", data.reply);
+      }
+
+      // Refresh state
       const stateRes = await fetch("/api/system/state");
       if (stateRes.ok) {
         const freshState = await stateRes.json();
         this.applyDynamicState(freshState);
       }
 
-      this.updateMetrics(data.latency_ms, data.prompt_tokens + data.completion_tokens, data.estimated_cost_usd);
-      this.updateStatus("Standing by, sir.");
+      this.reactorSubstatus.textContent = "standing by, sir.";
     } catch (e) {
-      this.appendMessage("assistant", `I apologize, sir. Error: ${e.message}`);
-      this.updateStatus("Cognitive exception encountered.");
+      this.appendMessage("assistant", `I apologize, sir: ${e.message}`);
     } finally {
       this.isStreaming = false;
     }
@@ -363,38 +587,34 @@ class FridayClient {
         if (data.reply) {
           this.appendMessage("assistant", data.reply);
           this.sessionHistory.push({ role: "assistant", content: data.reply });
+          this.speakResponse(data.reply);
         }
         this.isStreaming = false;
-        this.updateStatus("Standing by, sir.");
+        this.reactorSubstatus.textContent = "standing by, sir.";
         break;
 
       case "stream_start":
-        this.currentStreamContentDiv = this.appendMessage("assistant", "");
         this.currentAccumulatedText = "";
-        this.updateStatus(`Streaming from ${data.provider} (${data.model})...`);
+        this.reactorSubstatus.textContent = `streaming from ${data.model}...`;
         break;
 
       case "stream_chunk":
-        if (data.content && this.currentStreamContentDiv) {
+        if (data.content) {
           this.currentAccumulatedText += data.content;
-          this.currentStreamContentDiv.textContent = this.currentAccumulatedText;
-          this.messagesStream.scrollTop = this.messagesStream.scrollHeight;
-        }
-        if (data.usage) {
-          this.updateMetrics(data.usage.latency_ms, data.usage.total_tokens, data.usage.estimated_cost_usd);
         }
         break;
 
       case "stream_end":
         if (this.currentAccumulatedText) {
+          this.appendMessage("assistant", this.currentAccumulatedText);
           this.sessionHistory.push({ role: "assistant", content: this.currentAccumulatedText });
-          // If long output (e.g. teardown report), open reading panel
-          if (this.currentAccumulatedText.length > 500) {
-            this.openReadingPanel("Full Report Dossier", this.currentAccumulatedText);
+          this.speakResponse(this.currentAccumulatedText);
+          if (this.currentAccumulatedText.length > 350) {
+            this.openReadingPanel("Detailed Analysis", this.currentAccumulatedText);
           }
         }
         this.isStreaming = false;
-        this.updateStatus("Standing by, sir.");
+        this.reactorSubstatus.textContent = "standing by, sir.";
         break;
 
       default:
@@ -409,37 +629,16 @@ class FridayClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ voice_name: voiceName }),
       });
-      const data = await res.json();
       if (res.ok) {
+        const data = await res.json();
         this.applyDynamicState(data.state);
-        this.updateStatus(`Voice profile updated to ${voiceName}`);
+        this.speakResponse(`Voice switched to ${voiceName}, sir.`);
       }
     } catch (e) {
-      console.error("Failed to switch voice:", e);
+      console.error("Voice switch error:", e);
     }
   }
 
-  async switchProvider(providerId, model) {
-    try {
-      const res = await fetch("/api/providers/switch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider_id: providerId, model: model }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        this.applyDynamicState(data.state);
-        this.loadProvidersSettings();
-        this.updateStatus(`Brain switched to ${data.active_provider_name} (${data.active_model})`);
-      } else {
-        alert(data.detail || "Switch failed");
-      }
-    } catch (e) {
-      alert(`Switch error: ${e.message}`);
-    }
-  }
-
-  // Settings Modal logic
   async openSettingsModal() {
     this.settingsModal.classList.remove("hidden");
     await this.loadProvidersSettings();
@@ -484,11 +683,9 @@ class FridayClient {
       `;
       card.appendChild(head);
 
-      // Model selector with search and free-filtering
       const modelContainer = document.createElement("div");
       modelContainer.className = "model-selector-container";
 
-      // Filter row
       const filterRow = document.createElement("div");
       filterRow.className = "model-filter-row";
 
@@ -512,7 +709,6 @@ class FridayClient {
       }
       modelContainer.appendChild(filterRow);
 
-      // Select dropdown
       const select = document.createElement("select");
       select.className = "model-select-dropdown";
 
@@ -574,7 +770,6 @@ class FridayClient {
 
       populateOptions();
 
-      // Search listeners
       searchInput.addEventListener("input", (e) => {
         filterQuery = e.target.value;
         populateOptions();
@@ -596,7 +791,6 @@ class FridayClient {
 
       modelContainer.appendChild(select);
 
-      // Model action buttons
       const actionsRow = document.createElement("div");
       actionsRow.className = "model-actions-row";
 
@@ -629,7 +823,6 @@ class FridayClient {
       modelContainer.appendChild(actionsRow);
       card.appendChild(modelContainer);
 
-      // Key input row (for commercial providers)
       if (p.id !== "ollama_local") {
         const keyRow = document.createElement("div");
         keyRow.className = "key-input-row";
@@ -672,9 +865,28 @@ class FridayClient {
       this.providersList.appendChild(card);
     });
   }
+
+  async switchProvider(providerId, model) {
+    try {
+      const res = await fetch("/api/providers/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider_id: providerId, model: model }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        this.applyDynamicState(data.state);
+        this.loadProvidersSettings();
+        this.speakResponse(`Brain switched to ${data.active_provider_name}, running model ${data.active_model}, sir.`);
+      } else {
+        alert(data.detail || "Switch failed");
+      }
+    } catch (e) {
+      alert(`Switch error: ${e.message}`);
+    }
+  }
 }
 
-// Instantiate on DOM ready
 document.addEventListener("DOMContentLoaded", () => {
   window.friday = new FridayClient();
 });
