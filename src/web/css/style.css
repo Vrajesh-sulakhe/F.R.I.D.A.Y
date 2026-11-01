@@ -695,7 +695,7 @@ button svg * {
   top: 1rem;
   right: 1rem;
   bottom: 1rem;
-  width: 440px;
+  width: min(540px, 92vw);
   background: rgba(8, 12, 20, 0.95);
   backdrop-filter: blur(24px);
   border: 1px solid var(--border-hud);
@@ -778,7 +778,133 @@ button svg * {
   font-size: 0.88rem;
   line-height: 1.6;
   color: var(--text-main);
-  white-space: pre-wrap;
+}
+
+.dossier-h2 {
+  font-size: 1.25rem;
+  color: white;
+  margin-top: 0.5rem;
+  margin-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border-hud);
+  padding-bottom: 0.4rem;
+  font-weight: 700;
+}
+
+.dossier-h3 {
+  font-size: 1.05rem;
+  color: var(--border-cyan);
+  margin-top: 1.2rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.dossier-h4 {
+  font-size: 0.95rem;
+  color: #e2e8f0;
+  margin-top: 1rem;
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+}
+
+.dossier-hr {
+  border: none;
+  border-top: 1px solid var(--border-hud);
+  margin: 1.2rem 0;
+}
+
+.dossier-img-wrap {
+  margin: 1rem 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-hud);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.dossier-snapshot-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px 8px 0 0;
+}
+
+.img-caption {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  background: rgba(15, 23, 42, 0.8);
+  border-top: 1px solid var(--border-hud);
+}
+
+.dossier-inline-code {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--border-cyan);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.dossier-code-block {
+  position: relative;
+  background: rgba(10, 15, 25, 0.95);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #38bdf8;
+}
+
+.code-lang-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.dossier-table-wrap {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid var(--border-hud);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.dossier-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.dossier-table th {
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  background: rgba(15, 23, 42, 0.8);
+  border-bottom: 2px solid var(--border-hud);
+  color: var(--border-cyan);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.dossier-table td {
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: top;
+}
+
+.dossier-ul {
+  padding-left: 1.2rem;
+  margin: 0.6rem 0;
+}
+
+.dossier-li {
+  margin-bottom: 0.3rem;
 }
 
 /* Settings Modal */

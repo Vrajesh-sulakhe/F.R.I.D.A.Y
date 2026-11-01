@@ -175,8 +175,37 @@ async def text_to_speech(payload: TTSRequest):
 
 
 class PathActionRequest(BaseModel):
-
     path: str
+
+
+class TeardownRequest(BaseModel):
+    target: str
+    type: str = "auto"
+
+
+def extract_teardown_target(text: str) -> str | None:
+    """Detect voice or text commands requesting reverse engineering or teardown."""
+    import re
+    clean = text.strip().rstrip("?!.")
+    clean = re.sub(r"^(?:friday|jarvis)[,\s]+", "", clean, flags=re.IGNORECASE)
+    m = re.search(
+        r"(?:can you\s+)?(?:reverse engineer|teardown|deconstruct|take apart|inspect stack of)\s+(.+?)(?:\s+for me|\s+please)?$",
+        clean,
+        re.IGNORECASE,
+    )
+    if m:
+        target = m.group(1).strip(" \"'`")
+        if target:
+            return target
+    return None
+
+
+@app.post("/api/tools/teardown")
+async def run_teardown(payload: TeardownRequest):
+    """Reverse engineer a website, macOS application bundle, codebase folder, or raw file."""
+    from src.tools.rea import REATeardownEngine
+    result = await REATeardownEngine.teardown(payload.target, mode=payload.type)
+    return result
 
 
 @app.post("/api/tools/open_app")
@@ -329,6 +358,23 @@ async def chat_endpoint(req: ChatRequest):
             estimated_cost_usd=0.0,
         )
 
+    # 1b. Check for REA reverse engineering / teardown commands
+    td_target = extract_teardown_target(user_text)
+    if td_target:
+        from src.tools.rea import REATeardownEngine
+        res = await REATeardownEngine.teardown(td_target)
+        td_reply = res.get("spoken_summary") or f"Teardown of {td_target} complete, sir."
+        return ChatResponsePayload(
+            reply=td_reply,
+            is_command=True,
+            provider="REA (Reverse Engineer Anything)",
+            model="Safe-Tracer",
+            latency_ms=10.0,
+            prompt_tokens=len(user_text) // 4,
+            completion_tokens=len(td_reply) // 4,
+            estimated_cost_usd=0.0,
+        )
+
     # 2. Build conversation context
     messages = list(req.session_history)
     messages.append(ChatMessage(role="user", content=user_text))
@@ -369,6 +415,16 @@ async def chat_stream_endpoint(req: ChatRequest):
         if handled and reply is not None:
             prov, model = llm_manager.get_active_provider()
             yield f"data: {json.dumps({'content': reply, 'is_command': True, 'provider': prov.name, 'model': model, 'finish_reason': 'stop'})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        # Check for REA teardown command
+        td_target = extract_teardown_target(user_text)
+        if td_target:
+            from src.tools.rea import REATeardownEngine
+            res = await REATeardownEngine.teardown(td_target)
+            td_reply = res.get("spoken_summary") or f"Teardown of {td_target} complete, sir."
+            yield f"data: {json.dumps({'content': td_reply, 'is_command': True, 'dossier': res.get('dossier'), 'provider': 'REA', 'model': 'Safe-Tracer', 'finish_reason': 'stop'})}\n\n"
             yield "data: [DONE]\n\n"
             return
 
@@ -425,7 +481,38 @@ async def websocket_chat_endpoint(websocket: WebSocket):
             data = json.loads(raw_text)
             action = data.get("action", "chat")
 
-            if action == "chat":
+            if action == "teardown":
+                target = data.get("target", "igloo.inc")
+                mode = data.get("type", "auto")
+                from src.tools.rea import REATeardownEngine
+
+                async def ws_progress(step, cur, tot):
+                    try:
+                        await websocket.send_json({
+                            "type": "teardown_progress",
+                            "step": step,
+                            "stage": cur,
+                            "total": tot,
+                            "target": target,
+                        })
+                    except Exception:
+                        pass
+
+                res = await REATeardownEngine.teardown(target, mode=mode, progress_cb=ws_progress)
+                await websocket.send_json({
+                    "type": "teardown_complete",
+                    "target": target,
+                    "target_type": res.get("type"),
+                    "title": res.get("title"),
+                    "reply": res.get("spoken_summary"),
+                    "dossier": res.get("dossier"),
+                    "snapshot_url": res.get("snapshot_url"),
+                    "tech_stack": res.get("tech_stack"),
+                    "state": llm_manager.get_system_state(),
+                })
+                continue
+
+            elif action == "chat":
                 user_msg = data.get("message", "").strip()
                 if not user_msg:
                     continue
@@ -436,6 +523,37 @@ async def websocket_chat_endpoint(websocket: WebSocket):
                     await websocket.send_json({
                         "type": "state_update",
                         "reply": reply,
+                        "state": llm_manager.get_system_state(),
+                    })
+                    continue
+
+                # Check for REA Teardown command
+                td_target = extract_teardown_target(user_msg)
+                if td_target:
+                    from src.tools.rea import REATeardownEngine
+
+                    async def ws_progress(step, cur, tot):
+                        try:
+                            await websocket.send_json({
+                                "type": "teardown_progress",
+                                "step": step,
+                                "stage": cur,
+                                "total": tot,
+                                "target": td_target,
+                            })
+                        except Exception:
+                            pass
+
+                    res = await REATeardownEngine.teardown(td_target, progress_cb=ws_progress)
+                    await websocket.send_json({
+                        "type": "teardown_complete",
+                        "target": td_target,
+                        "target_type": res.get("type"),
+                        "title": res.get("title"),
+                        "reply": res.get("spoken_summary"),
+                        "dossier": res.get("dossier"),
+                        "snapshot_url": res.get("snapshot_url"),
+                        "tech_stack": res.get("tech_stack"),
                         "state": llm_manager.get_system_state(),
                     })
                     continue

@@ -711,7 +711,12 @@ class FridayClient {
     });
 
     document.getElementById("tool-rea-btn")?.addEventListener("click", () => {
-      this.userInput.value = "FRIDAY, can you reverse engineer igloo.inc for me?";
+      const currentVal = this.userInput.value.trim();
+      if (currentVal && !currentVal.toLowerCase().includes("reverse engineer") && !currentVal.toLowerCase().includes("teardown")) {
+        this.userInput.value = `FRIDAY, can you reverse engineer ${currentVal} for me?`;
+      } else if (!currentVal) {
+        this.userInput.value = "FRIDAY, can you reverse engineer igloo.inc for me?";
+      }
       this.handleUserSubmit();
     });
 
@@ -757,7 +762,7 @@ class FridayClient {
     // Reading panel controls
     this.closeReadingPanelBtn?.addEventListener("click", () => this.closeReadingPanel());
     this.readAloudBtn?.addEventListener("click", () => {
-      const textToRead = this.panelContent.textContent;
+      const textToRead = this.lastTeardownSummary || this.panelContent.textContent.slice(0, 450);
       if (textToRead) this.speakResponse(textToRead);
     });
 
@@ -855,9 +860,78 @@ class FridayClient {
     return msg;
   }
 
-  openReadingPanel(title, content) {
+  formatMarkdown(md) {
+    if (!md) return "";
+    let html = md;
+
+    // Code blocks
+    html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+      const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return `<pre class="dossier-code-block"><div class="code-lang-tag">${lang || 'code'}</div><code>${escaped}</code></pre>`;
+    });
+
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code class="dossier-inline-code">$1</code>');
+
+    // Images
+    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div class="dossier-img-wrap"><img src="$2" alt="$1" class="dossier-snapshot-img"><div class="img-caption">$1</div></div>');
+
+    // Headers
+    html = html.replace(/^### (.*$)/gim, '<h4 class="dossier-h4">$1</h4>');
+    html = html.replace(/^## (.*$)/gim, '<h3 class="dossier-h3">$1</h3>');
+    html = html.replace(/^# (.*$)/gim, '<h2 class="dossier-h2">$1</h2>');
+
+    // Bold & italic
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    // Horizontal rules
+    html = html.replace(/^\s*---\s*$/gim, '<hr class="dossier-hr">');
+
+    // Markdown tables
+    html = html.replace(/((?:\|[^\n]+\|\r?\n)+)/g, (tableText) => {
+      const rows = tableText.trim().split("\n");
+      if (rows.length < 2) return tableText;
+      let tableHtml = '<div class="dossier-table-wrap"><table class="dossier-table">';
+      rows.forEach((row, idx) => {
+        if (row.includes("---")) return;
+        const cells = row.split("|").slice(1, -1);
+        const tag = idx === 0 ? "th" : "td";
+        tableHtml += "<tr>";
+        cells.forEach(cell => {
+          tableHtml += `<${tag}>${cell.trim()}</${tag}>`;
+        });
+        tableHtml += "</tr>";
+      });
+      tableHtml += "</table></div>";
+      return tableHtml;
+    });
+
+    // Lists
+    html = html.replace(/^\s*-\s+(.*$)/gim, '<li class="dossier-li">$1</li>');
+    html = html.replace(/((?:<li class="dossier-li">.*?<\/li>\s*)+)/g, '<ul class="dossier-ul">$1</ul>');
+
+    // Paragraph breaks
+    html = html.replace(/\n\n/g, '<p class="dossier-p"></p>');
+
+    return html;
+  }
+
+  extractTeardownTarget(text) {
+    if (!text) return null;
+    let clean = text.trim().replace(/[?!.]+$/, '');
+    clean = clean.replace(/^(?:friday|jarvis)[,\s]+/i, '');
+    const m = clean.match(/(?:can you\s+)?(?:reverse engineer|teardown|deconstruct|take apart|inspect stack of)\s+(.+?)(?:\s+for me|\s+please)?$/i);
+    return m ? m[1].replace(/^["'`]|["'`]$/g, '').trim() : null;
+  }
+
+  openReadingPanel(title, content, isHtml = false) {
     this.panelTitle.textContent = title;
-    this.panelContent.textContent = content;
+    if (isHtml || content.includes("#") || content.includes("```") || content.includes("|")) {
+      this.panelContent.innerHTML = this.formatMarkdown(content);
+    } else {
+      this.panelContent.textContent = content;
+    }
     this.readingPanel.classList.remove("hidden");
   }
 
@@ -877,6 +951,42 @@ class FridayClient {
     // Highlight 3D graph if query matches keywords
     if (this.galaxy) {
       this.galaxy.highlightByQuery(text);
+    }
+
+    // 0. Teardown / Reverse Engineering Check
+    const tdTarget = this.extractTeardownTarget(text);
+    if (tdTarget) {
+      this.isStreaming = true;
+      this.reactorSubstatus.textContent = "REA is reading the code";
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          action: "teardown",
+          target: tdTarget,
+        }));
+        return;
+      }
+      try {
+        const res = await fetch("/api/tools/teardown", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: tdTarget }),
+        });
+        const data = await res.json();
+        const reply = data.spoken_summary || `Teardown of ${tdTarget} complete, sir.`;
+        this.appendMessage("assistant", reply);
+        this.sessionHistory.push({ role: "assistant", content: reply });
+        this.speakResponse(reply);
+        this.lastTeardownSummary = reply;
+        if (data.dossier) {
+          this.openReadingPanel(`Teardown Dossier: ${tdTarget}`, data.dossier, true);
+        }
+        this.reactorSubstatus.textContent = "standing by, sir.";
+      } catch (err) {
+        this.appendMessage("assistant", `Cognitive error during teardown: ${err.message}`);
+      } finally {
+        this.isStreaming = false;
+      }
+      return;
     }
 
     // 1. Direct Mac Action Check: "reveal ... in finder"
@@ -1025,6 +1135,31 @@ class FridayClient {
     switch (data.type) {
       case "init":
         this.applyDynamicState(data.state);
+        break;
+
+      case "teardown_progress":
+        if (this.reactorSubstatus) {
+          this.reactorSubstatus.textContent = data.step;
+        }
+        break;
+
+      case "teardown_complete":
+        if (data.state) {
+          this.applyDynamicState(data.state);
+        }
+        if (data.reply) {
+          this.appendMessage("assistant", data.reply);
+          this.sessionHistory.push({ role: "assistant", content: data.reply });
+          this.speakResponse(data.reply);
+        }
+        this.lastTeardownSummary = data.reply;
+        if (data.dossier) {
+          this.openReadingPanel(`Teardown Dossier: ${data.target}`, data.dossier, true);
+        }
+        this.isStreaming = false;
+        if (this.reactorSubstatus) {
+          this.reactorSubstatus.textContent = this.isListening ? "listening..." : "standing by, sir.";
+        }
         break;
 
       case "state_update":
