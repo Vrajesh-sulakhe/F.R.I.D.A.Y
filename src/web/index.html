@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v=2">
 
   <!-- Three.js & OrbitControls for 3D Second Brain Galaxy Graph -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -20,14 +20,14 @@
 
   <!-- Top Center View Control Pill -->
   <div class="top-center-pill">
-    <button id="fit-graph-btn" class="pill-btn" title="Fit Galaxy to Screen">o Fit</button>
-    <button id="love-btn" class="pill-btn" title="Heuristic Core">❤️</button>
-    <button id="reset-view-btn" class="pill-btn" title="Reset Orbit">👑</button>
+    <button type="button" id="fit-graph-btn" class="pill-btn" title="Fit Galaxy to Screen">o Fit</button>
+    <button type="button" id="love-btn" class="pill-btn" title="Heuristic Core">❤️</button>
+    <button type="button" id="reset-view-btn" class="pill-btn" title="Reset Orbit">👑</button>
   </div>
 
   <!-- Left Sidebar Panel (Inspector, Top Hubs, Forces) -->
   <aside class="sidebar-left">
-    <button class="back-2d-btn" id="toggle-2d-btn">&larr; Back to 2D</button>
+    <button type="button" class="back-2d-btn" id="toggle-2d-btn">&larr; Back to 2D</button>
 
     <div class="search-brain-box">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -201,7 +201,7 @@
       <!-- Tools & Microphone Dock Pill -->
       <div class="dock-tools-pill">
         <!-- Microphone Voice Button -->
-        <button id="dock-mic-btn" class="dock-tool-btn mic-btn" title="Voice Input (Microphone)">
+        <button type="button" id="dock-mic-btn" class="dock-tool-btn mic-btn" title="Voice Input (Microphone)">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -211,7 +211,7 @@
         </button>
 
         <!-- REA Teardown -->
-        <button class="dock-tool-btn" id="tool-rea-btn" title="Reverse Engineer Website (REA)">
+        <button type="button" class="dock-tool-btn" id="tool-rea-btn" title="Reverse Engineer Website (REA)">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="16 18 22 12 16 6"></polyline>
             <polyline points="8 6 2 12 8 18"></polyline>
@@ -219,7 +219,7 @@
         </button>
 
         <!-- Mac App Launcher / Canva -->
-        <button class="dock-tool-btn" id="tool-canva-btn" title="Launch Canva or Mac Apps">
+        <button type="button" class="dock-tool-btn" id="tool-canva-btn" title="Launch Canva or Mac Apps">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
             <line x1="8" y1="21" x2="16" y2="21"></line>
@@ -228,7 +228,7 @@
         </button>
 
         <!-- Google Calendar -->
-        <button class="dock-tool-btn" id="tool-calendar-btn" title="Google Calendar">
+        <button type="button" class="dock-tool-btn" id="tool-calendar-btn" title="Google Calendar">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
             <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -238,7 +238,7 @@
         </button>
 
         <!-- Gmail -->
-        <button class="dock-tool-btn" id="tool-gmail-btn" title="Gmail">
+        <button type="button" class="dock-tool-btn" id="tool-gmail-btn" title="Gmail">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
             <polyline points="22,6 12,13 2,6"></polyline>
@@ -246,7 +246,7 @@
         </button>
 
         <!-- Settings Modal Button -->
-        <button class="dock-tool-btn" id="open-settings-btn" title="Providers & Voice Settings">
+        <button type="button" class="dock-tool-btn" id="open-settings-btn" title="Providers & Voice Settings">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -261,7 +261,7 @@
     <div class="modal-card">
       <div class="modal-header">
         <h2>System Configuration</h2>
-        <button id="close-settings-btn" class="modal-close">&times;</button>
+        <button type="button" id="close-settings-btn" class="modal-close">&times;</button>
       </div>
       <div class="modal-body">
         <div class="settings-section">
@@ -269,7 +269,7 @@
           <p class="section-desc">Select active voice output profile (Local Voice Studio or Cloud ElevenLabs).</p>
           <div class="voice-picker-row">
             <select id="voice-picker-select" class="action-btn select-box"></select>
-            <button id="apply-voice-btn" class="action-btn primary">Apply Voice</button>
+            <button type="button" id="apply-voice-btn" class="action-btn primary">Apply Voice</button>
           </div>
         </div>
 
@@ -280,14 +280,14 @@
         </div>
 
         <div class="settings-actions">
-          <button id="refresh-providers-btn" class="action-btn secondary">Rescan Providers</button>
+          <button type="button" id="refresh-providers-btn" class="action-btn secondary">Rescan Providers</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Scripts -->
-  <script src="/static/js/graph.js"></script>
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/graph.js?v=2"></script>
+  <script src="/static/js/app.js?v=2"></script>
 </body>
 </html>
