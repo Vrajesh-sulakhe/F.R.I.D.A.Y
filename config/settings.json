@@ -1,6 +1,6 @@
 {
-  "active_provider": "ollama_local",
-  "active_model": "qwen3.5:9b",
+  "active_provider": "openrouter",
+  "active_model": "openrouter/free",
   "active_voice": "Jarvis (Local)",
   "voice_engine": "voice_studio",
   "temperature": 0.7,

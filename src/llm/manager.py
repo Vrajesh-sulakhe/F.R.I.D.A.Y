@@ -301,6 +301,7 @@ class LLMManager:
             self.active_model = provider.default_models[0]
 
         self.save_settings()
+        self._last_reported_brain = (self.active_provider_id, self.active_model)
         return f"Switched to {provider.name} ({self.active_model})"
 
     def handle_voice_or_text_command(self, user_text: str) -> tuple[bool, str | None]:
@@ -475,9 +476,16 @@ class LLMManager:
                     temperature=temperature,
                 )
                 if pid != primary_id:
-                    # Notify in character that fallback occurred
-                    fallback_note = f"\n\n*(Notice: Switched to fallback brain {provider.name} ({model}) as primary {primary_id} was unreachable, sir.)*"
-                    response.content = response.content + fallback_note
+                    current_brain = (pid, model)
+                    if getattr(self, "_last_reported_brain", None) != current_brain:
+                        self._last_reported_brain = current_brain
+                        fallback_note = f"\n\n*(Notice: Switched to fallback brain {provider.name} ({model}) as primary {primary_id} was unreachable, sir.)*"
+                        response.content = response.content + fallback_note
+                    # Persist the switched brain so future requests run directly on it
+                    self.active_provider_id = pid
+                    self.active_model = model
+                else:
+                    self._last_reported_brain = (pid, model)
                 return response
             except Exception as e:
                 logger.warning(f"Provider {pid} ({model}) failed: {e}. Attempting next in chain...")
@@ -521,11 +529,22 @@ class LLMManager:
                     temperature=temperature,
                 ):
                     if not first_chunk_received and fallback_used:
-                        yield StreamChunk(
-                            content=f"[Switched to fallback brain: {provider.name} ({model})]\n\n"
-                        )
+                        current_brain = (pid, model)
+                        # Only announce once when the model is actually switched!
+                        if getattr(self, "_last_reported_brain", None) != current_brain:
+                            self._last_reported_brain = current_brain
+                            yield StreamChunk(
+                                content=f"[Switched to fallback brain: {provider.name} ({model})]\n\n"
+                            )
+                        # Persist the switched brain so future requests run directly on it without repeating notice
+                        self.active_provider_id = pid
+                        self.active_model = model
+
                     first_chunk_received = True
                     yield chunk
+
+                if not fallback_used:
+                    self._last_reported_brain = (pid, model)
 
                 # Successfully finished stream
                 return
@@ -538,6 +557,7 @@ class LLMManager:
             content=f"\n\nI apologize, sir, but all brain providers are currently non-responsive. Root error: {last_error}",
             finish_reason="error",
         )
+
 
     def get_providers_status(self) -> dict[str, Any]:
         """Return provider and model status for the UI, masking secrets."""

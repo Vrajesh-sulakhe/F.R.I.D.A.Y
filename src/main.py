@@ -412,7 +412,10 @@ async def websocket_chat_endpoint(websocket: WebSocket):
                         "usage": chunk.usage.model_dump() if chunk.usage else None,
                     })
 
-                await websocket.send_json({"type": "stream_end"})
+                await websocket.send_json({
+                    "type": "stream_end",
+                    "state": llm_manager.get_system_state(),
+                })
 
             elif action == "switch_brain":
                 pid = data.get("provider_id")

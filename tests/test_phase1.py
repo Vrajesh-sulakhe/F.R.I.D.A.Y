@@ -206,3 +206,40 @@ def test_mac_file_tools():
     assert data["success"] is True
 
 
+@pytest.mark.anyio
+async def test_fallback_notification_only_once():
+    # Save original
+    orig_prov = llm_manager.active_provider_id
+    orig_model = llm_manager.active_model
+
+    try:
+        # Set primary to non-running local model to trigger fallback to OpenRouter
+        llm_manager.fallback_chain = ["openrouter"]
+        llm_manager.providers["openrouter"].default_models = ["cohere/north-mini-code:free"]
+        llm_manager.set_active_provider_and_model("ollama_local", "non_existent_model_123")
+        llm_manager._last_reported_brain = None
+
+        # First stream should announce fallback
+        chunks1 = []
+        async for chunk in llm_manager.chat_stream_with_fallback(
+            messages=[ChatMessage(role="user", content="Hi")]
+        ):
+            chunks1.append(chunk.content)
+        full_text1 = "".join(chunks1)
+        # Switched text is present in the first fallback
+        assert "[Switched to fallback brain" in full_text1
+
+        # Second stream should NOT announce fallback because provider is already switched
+        chunks2 = []
+        async for chunk in llm_manager.chat_stream_with_fallback(
+            messages=[ChatMessage(role="user", content="Next message")]
+        ):
+            chunks2.append(chunk.content)
+        full_text2 = "".join(chunks2)
+        assert "[Switched to fallback brain" not in full_text2
+    finally:
+        llm_manager.set_active_provider_and_model(orig_prov, orig_model)
+
+
+
+

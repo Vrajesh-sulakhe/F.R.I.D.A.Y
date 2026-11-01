@@ -893,6 +893,9 @@ class FridayClient {
         break;
 
       case "stream_end":
+        if (data.state) {
+          this.applyDynamicState(data.state);
+        }
         if (this.currentAccumulatedText) {
           this.appendMessage("assistant", this.currentAccumulatedText);
           this.sessionHistory.push({ role: "assistant", content: this.currentAccumulatedText });
