@@ -422,11 +422,28 @@ body.jarvis-theme {
   border-color: var(--accent-emerald);
 }
 
+.model-badge {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.model-badge:hover {
+  border-color: var(--border-cyan);
+  background: rgba(56, 189, 248, 0.15);
+  box-shadow: 0 0 12px var(--accent-cyan-glow);
+}
+
+button svg,
+button svg * {
+  pointer-events: none;
+}
+
 .badge-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
 }
+
 
 .pulse-emerald {
   background: var(--accent-emerald);
@@ -768,12 +785,12 @@ body.jarvis-theme {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.82);
-  backdrop-filter: blur(12px);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 9999;
   opacity: 1;
   transition: opacity 0.2s;
 }

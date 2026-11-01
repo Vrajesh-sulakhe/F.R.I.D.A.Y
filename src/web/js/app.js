@@ -57,12 +57,47 @@ class FridayClient {
   }
 
   async init() {
-    this.init3DGalaxyGraph();
-    this.initSpeechRecognition();
-    this.bindEvents();
-    this.startReactorWaveAnimation();
-    await this.fetchFreshSession();
-    this.connectWebSocket();
+    // 1. Bind events immediately so all UI buttons, settings, and docks are interactive
+    try {
+      this.bindEvents();
+    } catch (e) {
+      console.error("Failed to bind UI events:", e);
+    }
+
+    // 2. Initialize 3D Galaxy Graph
+    try {
+      this.init3DGalaxyGraph();
+    } catch (e) {
+      console.error("Failed to init 3D Galaxy Graph:", e);
+    }
+
+    // 3. Initialize Speech Recognition
+    try {
+      this.initSpeechRecognition();
+    } catch (e) {
+      console.warn("Speech recognition init warning:", e);
+    }
+
+    // 4. Start Arc Reactor Wave Animation
+    try {
+      this.startReactorWaveAnimation();
+    } catch (e) {
+      console.warn("Reactor wave animation warning:", e);
+    }
+
+    // 5. Fetch fresh session greeting & dynamic state
+    try {
+      await this.fetchFreshSession();
+    } catch (e) {
+      console.error("Fresh session fetch error:", e);
+    }
+
+    // 6. Connect WebSocket
+    try {
+      this.connectWebSocket();
+    } catch (e) {
+      console.warn("WebSocket connect warning:", e);
+    }
   }
 
   init3DGalaxyGraph() {
@@ -70,10 +105,17 @@ class FridayClient {
       this.galaxy = new GalaxyGraph("graph-canvas-container", (nodeData) => {
         this.displayNodeInInspector(nodeData);
       });
-      this.renderHubsList();
-      this.renderFilterList();
     }
   }
+
+  renderHubsList(hubs = []) {
+    this.renderRealHubsList(hubs || (this.galaxy ? this.galaxy.hubs : []));
+  }
+
+  renderFilterList(categories = {}) {
+    this.renderRealFilterList(categories || (this.galaxy ? this.galaxy.categories : {}));
+  }
+
 
   renderRealHubsList(hubs) {
     if (!this.hubsList) return;
@@ -520,14 +562,33 @@ class FridayClient {
     document.getElementById("open-settings-btn")?.addEventListener("click", () => {
       this.openSettingsModal();
     });
+    document.getElementById("hud-model-badge")?.addEventListener("click", () => {
+      this.openSettingsModal();
+    });
     document.getElementById("close-settings-btn")?.addEventListener("click", () => {
       this.closeSettingsModal();
     });
     document.getElementById("refresh-providers-btn")?.addEventListener("click", () => {
       this.loadProvidersSettings();
     });
-    this.settingsModal.addEventListener("click", (e) => {
+    this.settingsModal?.addEventListener("click", (e) => {
       if (e.target === this.settingsModal) this.closeSettingsModal();
+    });
+
+    // Top pill view buttons
+    document.getElementById("fit-graph-btn")?.addEventListener("click", () => {
+      if (this.galaxy) this.galaxy.fitView();
+    });
+    document.getElementById("reset-view-btn")?.addEventListener("click", () => {
+      if (this.galaxy) this.galaxy.fitView();
+    });
+    document.getElementById("toggle-2d-btn")?.addEventListener("click", () => {
+      if (this.galaxy) {
+        this.galaxy.setViewMode(this.galaxy.viewMode === "face" ? "ring" : "face");
+      }
+    });
+    document.getElementById("love-btn")?.addEventListener("click", () => {
+      this.speakResponse("Always at your service, sir. All core heuristics running at peak efficiency.");
     });
 
     // Apply voice button
