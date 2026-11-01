@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FRIDAY - Personal AI Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="friday-theme">
+  <!-- Top Navigation & System HUD -->
+  <header class="hud-header">
+    <div class="hud-brand">
+      <div class="arc-reactor-icon">
+        <div class="inner-core"></div>
+      </div>
+      <div>
+        <h1 class="system-title">F.R.I.D.A.Y.</h1>
+        <p class="system-subtitle">Heuristic Data & Butler Intelligence</p>
+      </div>
+    </div>
+
+    <!-- Active Brain & Voice Badges -->
+    <div class="hud-status-cluster">
+      <div class="status-badge" id="brain-badge" title="Active Brain Engine">
+        <span class="badge-dot pulse-cyan"></span>
+        <span class="badge-label">Brain:</span>
+        <span class="badge-value" id="active-brain-text">Ollama (Local) / qwen3.5:9b</span>
+      </div>
+
+      <div class="status-badge" id="voice-badge" title="Active Voice Engine">
+        <span class="badge-dot pulse-amber"></span>
+        <span class="badge-label">Voice:</span>
+        <span class="badge-value" id="active-voice-text">Jarvis (Local)</span>
+      </div>
+
+      <button id="open-settings-btn" class="hud-btn" title="Provider & System Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        <span>Settings</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Live Status Feed -->
+  <div class="activity-bar">
+    <div class="activity-indicator">
+      <span class="status-scan-line"></span>
+      <span class="activity-label">STATUS:</span>
+      <span id="live-status-text" class="activity-text">System initialized. Standing by, sir.</span>
+    </div>
+    <div id="metric-ticker" class="metric-ticker">
+      <span id="metric-latency">Latency: -- ms</span>
+      <span class="metric-sep">|</span>
+      <span id="metric-tokens">Tokens: --</span>
+      <span class="metric-sep">|</span>
+      <span id="metric-cost">Cost: $0.0000</span>
+    </div>
+  </div>
+
+  <!-- Main Workspace -->
+  <main class="main-container">
+    <!-- Chat Stream Conversation View -->
+    <section class="conversation-panel">
+      <div id="messages-stream" class="messages-stream">
+        <!-- Initial Butler Greeting -->
+        <div class="message-wrapper assistant">
+          <div class="avatar-jarvis">F</div>
+          <div class="message-body">
+            <div class="message-header">FRIDAY <span class="time-stamp">Just now</span></div>
+            <div class="message-content" id="initial-greeting">Hello, sir. Standing by for instructions.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Command Prompts -->
+      <div class="quick-commands-bar">
+        <span class="quick-label">Voice / Quick Switches:</span>
+        <button class="cmd-chip" data-cmd="FRIDAY, switch to your local brain">Switch to Local (Qwen 3.5)</button>
+        <button class="cmd-chip" data-cmd="Switch to Gemma 4 12 billion parameter">Switch to Gemma 4 (12B)</button>
+        <button class="cmd-chip" data-cmd="Switch your brain back to Qwen 3.5">Back to Qwen 3.5</button>
+        <button class="cmd-chip" data-cmd="switch to OpenRouter">Switch to OpenRouter</button>
+        <button class="cmd-chip" data-cmd="switch to Claude">Switch to Claude</button>
+        <button class="cmd-chip" data-cmd="How do you feel running locally?">How do you feel locally?</button>
+      </div>
+
+      <!-- Command Input -->
+      <form id="chat-form" class="chat-input-bar">
+        <input 
+          type="text" 
+          id="user-input" 
+          placeholder="Speak or type a command, sir..." 
+          autocomplete="off"
+          required
+        >
+        <button type="submit" id="send-btn" class="send-button">
+          <span>Transmit</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </form>
+    </section>
+  </main>
+
+  <!-- Provider Settings Modal -->
+  <div id="settings-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Brain Providers & Models</h2>
+        <button id="close-settings-btn" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Configure LLM providers, model selection, and API keys. Keys are stored safely in <code>.env</code>.</p>
+        
+        <div id="providers-list" class="providers-list">
+          <!-- Populated dynamically via JS -->
+        </div>
+
+        <div class="settings-actions">
+          <button id="refresh-providers-btn" class="action-btn secondary">Refresh Status</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

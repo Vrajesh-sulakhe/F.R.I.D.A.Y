@@ -1,0 +1,25 @@
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Secrets & Config
+.env
+*.local.env
+
+# Logs & temp
+*.log
+scratch/
+.DS_Store
+
+# Static build artifacts
+dist/
+node_modules/

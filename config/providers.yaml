@@ -1,0 +1,53 @@
+providers:
+  openrouter:
+    name: "OpenRouter"
+    type: "openai_compatible"
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env: "OPENROUTER_API_KEY"
+    models:
+      - "anthropic/claude-3.7-sonnet"
+      - "anthropic/claude-3.5-sonnet"
+      - "meta-llama/llama-3.3-70b-instruct"
+      - "google/gemini-2.0-flash-001"
+      - "deepseek/deepseek-r1"
+      - "deepseek/deepseek-chat"
+  nvidia_nim:
+    name: "NVIDIA NIM"
+    type: "openai_compatible"
+    base_url: "https://integrate.api.nvidia.com/v1"
+    api_key_env: "NVIDIA_API_KEY"
+    models:
+      - "meta/llama-3.3-70b-instruct"
+      - "deepseek-ai/deepseek-r1"
+      - "mistralai/mistral-large-2-instruct"
+  anthropic:
+    name: "Anthropic"
+    type: "anthropic"
+    base_url: "https://api.anthropic.com/v1"
+    api_key_env: "ANTHROPIC_API_KEY"
+    models:
+      - "claude-3-7-sonnet-20250219"
+      - "claude-3-5-sonnet-latest"
+      - "claude-3-5-haiku-latest"
+  custom_1:
+    name: "Custom Provider"
+    type: "openai_compatible"
+    base_url: ""
+    api_key_env: "CUSTOM_API_KEY_1"
+    models: []
+  ollama_local:
+    name: "Ollama (Local)"
+    type: "openai_compatible"
+    base_url: "http://localhost:11434/v1"
+    api_key_env: null
+    models:
+      - "qwen3.5:9b"
+      - "gemma4:12b"
+      - "llama3.2:3b"
+      - "mistral:7b"
+
+fallback_chain:
+  - "openrouter"
+  - "anthropic"
+  - "nvidia_nim"
+  - "ollama_local"
