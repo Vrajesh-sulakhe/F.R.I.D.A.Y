@@ -120,11 +120,11 @@ def test_dynamic_system_state():
 
 
 def test_voice_switching():
-    # 1. Switch to local voice
-    handled, reply = llm_manager.handle_voice_or_text_command("Switch to your local voice")
+    # 1. Switch to FRIDAY voice
+    handled, reply = llm_manager.handle_voice_or_text_command("Switch to your Friday voice")
     assert handled is True
-    assert "How do I sound, sir? This is my local voice." in reply
-    assert llm_manager.active_voice_name == "Jarvis"
+    assert "How do I sound, Boss?" in reply
+    assert llm_manager.active_voice_name == "FRIDAY (Local Irish)"
 
     # 2. Switch voice to Zubar B
     handled, reply = llm_manager.handle_voice_or_text_command("Switch your voice to Zubar B")
@@ -133,10 +133,10 @@ def test_voice_switching():
     assert llm_manager.active_voice_name == "Zubar B"
 
     # 3. Switch via API
-    res = client.post("/api/voice/switch", json={"voice_name": "Jarvis (Local)", "engine": "voice_studio"})
+    res = client.post("/api/voice/switch", json={"voice_name": "FRIDAY (Local Irish)", "engine": "voice_studio"})
     assert res.status_code == 200
     data = res.json()
-    assert data["active_voice"] == "Jarvis (Local)"
+    assert data["active_voice"] == "FRIDAY (Local Irish)"
 
 
 @pytest.mark.anyio

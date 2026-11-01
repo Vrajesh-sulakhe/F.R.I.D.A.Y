@@ -1,7 +1,7 @@
 {
   "active_provider": "ollama_local",
   "active_model": "qwen3.5:9b",
-  "active_voice": "Jarvis (Local)",
+  "active_voice": "FRIDAY (Local Irish)",
   "voice_engine": "voice_studio",
   "temperature": 0.7,
   "fallback_chain": [

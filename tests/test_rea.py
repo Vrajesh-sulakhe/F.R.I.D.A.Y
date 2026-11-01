@@ -150,3 +150,4 @@ def test_websocket_teardown_streaming():
         assert "sir" in complete_event["reply"]
         assert "dossier" in complete_event
         assert "com.apple.calculator" in complete_event["dossier"]
+

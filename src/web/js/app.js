@@ -604,10 +604,14 @@ class FridayClient {
     if (!this.synth) return this.finishSpeaking();
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = this.synth.getVoices();
-    const voice = voices.find(v => v.name.includes("Daniel")) || voices.find(v => v.lang === "en-GB");
+    // Prioritize Irish female (Moira) matching Iron Man's F.R.I.D.A.Y.
+    const voice = voices.find(v => v.name.includes("Moira")) ||
+                  voices.find(v => v.lang === "en-IE") ||
+                  voices.find(v => v.name.includes("Samantha")) ||
+                  voices.find(v => v.lang.startsWith("en"));
     if (voice) utterance.voice = voice;
-    utterance.rate = 0.95;
-    utterance.pitch = 0.9;
+    utterance.rate = 1.05;
+    utterance.pitch = 1.05;
     utterance.onend = utterance.onerror = () => {
       if (token === this.speakToken) this.finishSpeaking();
     };

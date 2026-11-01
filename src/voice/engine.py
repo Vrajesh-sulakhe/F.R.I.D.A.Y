@@ -22,8 +22,8 @@ STT_MODEL_SIZE = "base.en"
 # Prompt biases Whisper toward the assistant's vocabulary.
 STT_PROMPT = "FRIDAY, Jarvis, open Canva, open Safari, Notes, Calendar, Terminal, second brain, sir."
 
-TTS_VOICE = "Daniel"          # British male, closest built-in match to Jarvis
-TTS_RATE_WPM = 172            # measured, slightly unhurried butler cadence
+TTS_VOICE = "Moira"          # Irish female (Iron Man F.R.I.D.A.Y. - Kerry Condon)
+TTS_RATE_WPM = 185            # sharp, crisp tactical cadence
 TTS_MAX_CHARS = 1200
 
 _model = None
@@ -99,15 +99,29 @@ def clean_for_speech(text: str) -> str:
     return text[:TTS_MAX_CHARS]
 
 
+VOICE_MAP = {
+    "friday": "Moira",
+    "friday (local)": "Moira",
+    "friday (local irish)": "Moira",
+    "friday (irish female)": "Moira",
+    "moira": "Moira",
+    "samantha": "Samantha",
+    "karen": "Karen",
+    "jarvis": "Daniel",
+    "daniel": "Daniel",
+}
+
+
 def synthesize_wav(text: str, voice: str = TTS_VOICE) -> bytes:
     """Render speech to 22.05 kHz 16-bit WAV bytes using macOS `say`."""
     text = clean_for_speech(text)
     if not text:
         return b""
+    resolved_voice = VOICE_MAP.get(voice.lower().strip(), voice) if voice else TTS_VOICE
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "speech.wav"
         cmd = [
-            "/usr/bin/say", "-v", voice, "-r", str(TTS_RATE_WPM),
+            "/usr/bin/say", "-v", resolved_voice, "-r", str(TTS_RATE_WPM),
             "--data-format=LEI16@22050", "-o", str(out), "--", text,
         ]
         result = subprocess.run(cmd, capture_output=True, timeout=60)

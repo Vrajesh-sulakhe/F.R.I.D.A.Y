@@ -42,9 +42,9 @@ class LLMManager:
         self.active_model: str = "qwen3.5:9b"
         self.personality_config: dict[str, Any] = {}
         self.raw_providers_config: dict[str, Any] = {}
-        self.active_voice_name: str = "Jarvis (Local)"
+        self.active_voice_name: str = "FRIDAY (Local Irish)"
         self.active_voice_engine: str = "voice_studio"
-        self.available_voices: list[str] = ["Jarvis (Local)", "Zubar B (Local)", "Jarvis (Cloud ElevenLabs)"]
+        self.available_voices: list[str] = ["FRIDAY (Local Irish)", "FRIDAY (Moira)", "Samantha (Local)", "Jarvis (Daniel)"]
 
         self.load_configurations()
 
@@ -230,8 +230,8 @@ class LLMManager:
             {"label": "Switch brain back to Qwen 3.5", "command": "Switch your brain back to Qwen 3.5"},
             {"label": "Switch to OpenRouter", "command": "switch to OpenRouter"},
             {"label": "Switch to Claude", "command": "switch to Claude"},
-            {"label": "Local voice: Jarvis", "command": "Switch to your local voice"},
-            {"label": "Local voice: Zubar B", "command": "Switch your voice to Zubar B"},
+            {"label": "FRIDAY Irish Voice", "command": "Switch to your Friday voice"},
+            {"label": "Switch to Jarvis Voice", "command": "Switch to Jarvis voice"},
             {"label": "How do you feel locally?", "command": "How do you feel running locally?"},
             {"label": "Open Canva", "command": "open Canva"},
             {"label": "Open Safari", "command": "open Safari"},
@@ -396,21 +396,33 @@ class LLMManager:
             return True, reply
 
         # Voice switching commands
-        if "switch to your local voice" in text or "switch to local voice" in text:
-            self.set_active_voice("Jarvis", "voice_studio")
-            return True, "How do I sound, sir? This is my local voice."
+        if (
+            "switch to your friday voice" in text
+            or "switch to friday voice" in text
+            or "switch to female voice" in text
+            or "switch to friday" in text
+            or "switch voice to friday" in text
+            or "switch to your local voice" in text
+            or "switch to local voice" in text
+        ):
+            self.set_active_voice("FRIDAY (Local Irish)", "voice_studio")
+            return True, "How do I sound, Boss? All tactical systems online."
+
+        if "switch to jarvis voice" in text or "switch to jarvis" in text or "switch voice to jarvis" in text:
+            self.set_active_voice("Jarvis (Daniel)", "voice_studio")
+            return True, "How do I sound, sir? This is my Jarvis butler voice."
 
         if "switch your voice to zubar b" in text or "switch voice to zubar b" in text or "switch to zubar" in text:
             self.set_active_voice("Zubar B", "voice_studio")
             return True, "How do I sound, sir? This is Zubar B."
 
-        if "switch back to your jarvis voice" in text or "switch back to jarvis voice" in text or "switch to jarvis voice" in text:
-            self.set_active_voice("Jarvis", "voice_studio")
-            return True, "How do I sound, sir? This is my local voice."
+        if "switch to samantha voice" in text or "switch to samantha" in text:
+            self.set_active_voice("Samantha (Local)", "voice_studio")
+            return True, "How do I sound, sir? This is Samantha."
 
         if "switch to cloud voice" in text or "switch to elevenlabs" in text:
-            self.set_active_voice("Jarvis (ElevenLabs)", "elevenlabs")
-            return True, "Cloud voice engaged, sir. Crisp and ready."
+            self.set_active_voice("FRIDAY (Cloud ElevenLabs)", "elevenlabs")
+            return True, "Cloud voice engaged, Boss. Crisp and ready."
 
         # Mac App Launcher command: "open <app>", "launch <app>", "can you open <app>"
         app_match = re.search(r"(?:can you open|open up|open|launch|start|run)\s+([a-zA-Z0-9_\-\.\s]+)", text)
