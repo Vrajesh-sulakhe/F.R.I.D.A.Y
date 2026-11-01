@@ -1,6 +1,7 @@
 """
-Mac App Launcher Tool for FRIDAY.
-Allows FRIDAY to detect and open installed macOS applications.
+Mac App Launcher & Local System Tools for FRIDAY.
+Allows FRIDAY to detect and open installed macOS applications,
+launch local documents/files, reveal items in Finder, and preview files.
 """
 import os
 import subprocess
@@ -87,7 +88,6 @@ class MacAppLauncher:
                     break
 
         if not resolved_name:
-            # Fall back to capitalized query string directly
             resolved_name = app_name_query.strip().title()
 
         try:
@@ -103,3 +103,52 @@ class MacAppLauncher:
         except Exception as e:
             logger.error(f"Error launching {resolved_name}: {e}")
             return False, resolved_name, str(e)
+
+    @staticmethod
+    def open_file_path(path_str: str) -> tuple[bool, str]:
+        """Open any file or directory in its default macOS handler."""
+        p = Path(path_str).expanduser()
+        if not p.exists():
+            return False, f"Item not found on your Mac: {path_str}"
+        try:
+            cmd = ["/usr/bin/open", str(p)]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                return True, f"Opened {p.name} on macOS."
+            return False, res.stderr.strip() or "Failed to open file."
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def reveal_in_finder(path_str: str) -> tuple[bool, str]:
+        """Reveal any file, app, or folder in macOS Finder."""
+        p = Path(path_str).expanduser()
+        if not p.exists():
+            return False, f"Item not found on your Mac: {path_str}"
+        try:
+            cmd = ["/usr/bin/open", "-R", str(p)]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                return True, f"Revealed {p.name} in Finder."
+            return False, res.stderr.strip() or "Failed to reveal in Finder."
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def read_file_preview(path_str: str, max_chars: int = 4000) -> tuple[bool, str]:
+        """Read text content of local files for preview and speech."""
+        p = Path(path_str).expanduser()
+        if not p.exists():
+            return False, f"File not found: {path_str}"
+        if p.is_dir():
+            items = [f.name for f in p.iterdir() if not f.name.startswith(".")]
+            return True, f"Directory containing {len(items)} items: " + ", ".join(items[:20])
+
+        try:
+            with open(p, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read(max_chars)
+                if len(content) == max_chars:
+                    content += "\n... [truncated]"
+                return True, content
+        except Exception as e:
+            return False, f"Could not read file text: {e}"

@@ -75,15 +75,15 @@ class FridayClient {
     }
   }
 
-  renderHubsList() {
-    if (!this.hubsList || !this.galaxy) return;
+  renderRealHubsList(hubs) {
+    if (!this.hubsList) return;
     this.hubsList.innerHTML = "";
 
-    this.galaxy.hubs.forEach((hub) => {
+    hubs.forEach((hub) => {
       const row = document.createElement("div");
       row.className = "hub-item-row";
 
-      const hex = "#" + hub.color.toString(16).padStart(6, "0");
+      const hex = typeof hub.color === "number" ? "#" + hub.color.toString(16).padStart(6, "0") : (hub.color || "#38bdf8");
       row.innerHTML = `
         <div class="hub-name-group">
           <span class="hub-color-dot" style="background:${hex}; box-shadow:0 0 6px ${hex};"></span>
@@ -93,7 +93,7 @@ class FridayClient {
       `;
 
       row.addEventListener("click", () => {
-        this.galaxy.focusHub(hub.name);
+        if (this.galaxy) this.galaxy.focusHub(hub.name);
         this.userInput.value = `FRIDAY, pull up ${hub.name}`;
       });
 
@@ -101,25 +101,38 @@ class FridayClient {
     });
   }
 
-  renderFilterList() {
-    if (!this.filterItemsList || !this.galaxy) return;
+  renderRealFilterList(categories) {
+    if (!this.filterItemsList) return;
     this.filterItemsList.innerHTML = "";
 
-    Object.entries(this.galaxy.categories).forEach(([name, data]) => {
+    const catColors = {
+      "Applications": "#38bdf8",
+      "Projects": "#10b981",
+      "Code": "#60a5fa",
+      "Notes": "#facc15",
+      "Docs": "#f97316",
+      "Data": "#a855f7",
+      "Tools": "#ef4444",
+      "Files": "#94a3b8",
+      "Folders": "#eab308",
+    };
+
+    Object.entries(categories).forEach(([name, count]) => {
+      if (count <= 0) return;
       const row = document.createElement("div");
       row.className = "filter-item-row";
+      const hex = catColors[name] || "#94a3b8";
 
-      const hex = "#" + data.color.toString(16).padStart(6, "0");
       row.innerHTML = `
         <div class="filter-cat-group">
           <span class="hub-color-dot" style="background:${hex}; box-shadow:0 0 5px ${hex};"></span>
           <span>${name}</span>
         </div>
-        <span class="filter-count">${data.count}</span>
+        <span class="filter-count">${count}</span>
       `;
 
       row.addEventListener("click", () => {
-        this.galaxy.highlightByQuery(name);
+        if (this.galaxy) this.galaxy.highlightByQuery(name);
       });
 
       this.filterItemsList.appendChild(row);
@@ -131,11 +144,162 @@ class FridayClient {
     this.inspectorDesc.style.display = "none";
     this.inspectorDetails.classList.remove("hidden");
 
-    this.inspectorBadge.textContent = node.type || "Node";
+    const categoryIcons = {
+      "Applications": "💻",
+      "Utilities": "🛠️",
+      "Projects": "📁",
+      "Code": "🐍",
+      "Documents": "📄",
+      "Presentations": "📊",
+      "Notes": "📝",
+      "Data": "💾",
+      "Config": "⚙️",
+      "Media": "🖼️",
+      "Archives": "📦",
+      "Downloads": "⬇️",
+      "Desktop": "🖥️",
+      "Brain": "🧠",
+      "Files": "📎",
+    };
+
+    const icon = categoryIcons[node.category] || (node.is_app ? "💻" : (node.is_dir ? "📁" : "📄"));
+    this.inspectorBadge.textContent = `${icon} ${node.category || node.type || "Local Item"}`;
     this.inspectorTitle.textContent = node.name || "Untitled";
     this.inspectorText.textContent = node.summary || "No notes attached.";
-    this.inspectorMeta.textContent = `${node.hub ? 'Hub: ' + node.hub : 'Cluster Core'} · ${node.category || 'General'}`;
+
+    // Rich Metadata Display
+    const sizePart = node.size_human ? ` • ${node.size_human}` : "";
+    const mtimePart = node.mtime ? ` • ${node.mtime}` : "";
+    const hubPart = node.hub ? `[${node.hub}] ` : "";
+    this.inspectorMeta.textContent = `${hubPart}${node.path || 'Mac Local Item'}${sizePart}${mtimePart}`;
+
+    // Remove existing action button container if present
+    const oldContainer = document.getElementById("inspector-actions-container");
+    if (oldContainer) oldContainer.remove();
+
+    const actionsContainer = document.createElement("div");
+    actionsContainer.id = "inspector-actions-container";
+    actionsContainer.className = "inspector-actions-grid";
+    actionsContainer.style.display = "flex";
+    actionsContainer.style.flexDirection = "column";
+    actionsContainer.style.gap = "0.5rem";
+    actionsContainer.style.marginTop = "0.85rem";
+
+    if (node.is_app) {
+      // Application Actions
+      const launchBtn = document.createElement("button");
+      launchBtn.className = "action-btn primary";
+      launchBtn.style.width = "100%";
+      launchBtn.textContent = `🚀 Launch ${node.name} on Mac`;
+      launchBtn.addEventListener("click", async () => {
+        launchBtn.textContent = "Launching...";
+        const res = await fetch("/api/tools/open_app", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ app_name: node.name }),
+        });
+        const d = await res.json();
+        launchBtn.textContent = d.success ? "✓ Launched on Mac" : "Launch Failed";
+        this.speakResponse(`Opening ${node.name} for you, sir. Right away.`);
+        setTimeout(() => { launchBtn.textContent = `🚀 Launch ${node.name} on Mac`; }, 2500);
+      });
+      actionsContainer.appendChild(launchBtn);
+
+      const revealBtn = document.createElement("button");
+      revealBtn.className = "action-btn";
+      revealBtn.style.width = "100%";
+      revealBtn.textContent = `📂 Reveal ${node.name} in Finder`;
+      revealBtn.addEventListener("click", async () => {
+        revealBtn.textContent = "Revealing...";
+        const res = await fetch("/api/tools/reveal_in_finder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: node.path }),
+        });
+        const d = await res.json();
+        revealBtn.textContent = d.success ? "✓ Revealed in Finder" : "Failed";
+        this.speakResponse(`Revealed ${node.name} in your macOS Finder, sir.`);
+        setTimeout(() => { revealBtn.textContent = `📂 Reveal ${node.name} in Finder`; }, 2500);
+      });
+      actionsContainer.appendChild(revealBtn);
+
+    } else {
+      // Local File / Directory Actions
+      const openBtn = document.createElement("button");
+      openBtn.className = "action-btn primary";
+      openBtn.style.width = "100%";
+      openBtn.textContent = `📄 Open ${node.is_dir ? 'Folder' : 'File'} on Mac`;
+      openBtn.addEventListener("click", async () => {
+        openBtn.textContent = "Opening...";
+        const res = await fetch("/api/tools/open_file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: node.path }),
+        });
+        const d = await res.json();
+        openBtn.textContent = d.success ? "✓ Opened on Mac" : "Failed";
+        this.speakResponse(`Opening ${node.name} for you, sir.`);
+        setTimeout(() => { openBtn.textContent = `📄 Open ${node.is_dir ? 'Folder' : 'File'} on Mac`; }, 2500);
+      });
+      actionsContainer.appendChild(openBtn);
+
+      const revealBtn = document.createElement("button");
+      revealBtn.className = "action-btn";
+      revealBtn.style.width = "100%";
+      revealBtn.textContent = `📂 Reveal in Finder`;
+      revealBtn.addEventListener("click", async () => {
+        revealBtn.textContent = "Revealing...";
+        const res = await fetch("/api/tools/reveal_in_finder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: node.path }),
+        });
+        const d = await res.json();
+        revealBtn.textContent = d.success ? "✓ Revealed" : "Failed";
+        this.speakResponse(`Revealed in Finder, sir.`);
+        setTimeout(() => { revealBtn.textContent = `📂 Reveal in Finder`; }, 2500);
+      });
+      actionsContainer.appendChild(revealBtn);
+
+      // If text/code readable, offer Preview panel
+      if (node.is_text_readable) {
+        const previewBtn = document.createElement("button");
+        previewBtn.className = "action-btn";
+        previewBtn.style.width = "100%";
+        previewBtn.textContent = `📖 Inspect File Content`;
+        previewBtn.addEventListener("click", async () => {
+          previewBtn.textContent = "Loading file...";
+          try {
+            const res = await fetch(`/api/tools/read_file?path=${encodeURIComponent(node.path)}`);
+            if (res.ok) {
+              const fileData = await res.json();
+              this.openReadingPanel(`${node.name} (${node.size_human})`, fileData.content);
+              previewBtn.textContent = `📖 Inspect File Content`;
+              this.speakResponse(`Displaying contents of ${node.name} on your reading panel, sir.`);
+            } else {
+              previewBtn.textContent = "Could not read";
+            }
+          } catch (e) {
+            previewBtn.textContent = "Error reading";
+          }
+        });
+        actionsContainer.appendChild(previewBtn);
+      }
+
+      // Voice read aloud
+      const readBtn = document.createElement("button");
+      readBtn.className = "action-btn";
+      readBtn.style.width = "100%";
+      readBtn.textContent = `🔊 Read Summary Aloud`;
+      readBtn.addEventListener("click", () => {
+        this.speakResponse(node.summary || `${node.name}, located at ${node.path}`);
+      });
+      actionsContainer.appendChild(readBtn);
+    }
+
+    this.inspectorDetails.appendChild(actionsContainer);
   }
+
 
   initSpeechRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -497,14 +661,76 @@ class FridayClient {
       this.galaxy.highlightByQuery(text);
     }
 
-    // Direct Mac App Launcher check
+    // 1. Direct Mac Action Check: "reveal ... in finder"
     const lower = text.toLowerCase();
+    if (lower.startsWith("reveal ") || lower.includes("in finder") || lower.startsWith("show in finder")) {
+      let query = text.replace(/^(reveal|show)\s+/i, "").replace(/\s+in finder$/i, "").trim();
+      let matchedNode = this.galaxy?.nodes.find(n => n.userData.name.toLowerCase().includes(query.toLowerCase()) || (n.userData.path && n.userData.path.toLowerCase().includes(query.toLowerCase())));
+      const targetPath = matchedNode ? matchedNode.userData.path : query;
+      const res = await fetch("/api/tools/reveal_in_finder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: targetPath }),
+      });
+      const data = await res.json();
+      const reply = data.success ? `Revealed ${matchedNode ? matchedNode.userData.name : query} in Finder for you, sir.` : `Could not reveal in Finder, sir: ${data.message}`;
+      this.appendMessage("assistant", reply);
+      this.sessionHistory.push({ role: "assistant", content: reply });
+      this.speakResponse(reply);
+      this.reactorSubstatus.textContent = `Tool run: Reveal Finder`;
+      return;
+    }
+
+    // 2. Direct Mac Action Check: "pull up ..." or "focus ..."
+    if (lower.startsWith("pull up ") || lower.startsWith("focus ")) {
+      const query = text.replace(/^(pull up|focus)\s+/i, "").trim();
+      const matchCount = this.galaxy ? this.galaxy.highlightByQuery(query) : 0;
+      let matchedNode = this.galaxy?.nodes.find(n => n.userData.name.toLowerCase().includes(query.toLowerCase()));
+      if (matchedNode) {
+        this.galaxy.selectNode(matchedNode);
+        if (this.galaxy.controls) {
+          this.galaxy.controls.target.copy(matchedNode.position);
+          this.galaxy.camera.position.set(matchedNode.position.x, matchedNode.position.y + 40, matchedNode.position.z + 180);
+          this.galaxy.controls.update();
+        }
+      }
+      const reply = matchedNode
+        ? `Pulling up ${matchedNode.userData.name} from your second brain, sir. ${matchedNode.userData.summary}`
+        : `I searched your second brain for "${query}", sir, and highlighted ${matchCount} matching nodes.`;
+      this.appendMessage("assistant", reply);
+      this.sessionHistory.push({ role: "assistant", content: reply });
+      this.speakResponse(reply);
+      this.reactorSubstatus.textContent = `Focused: ${query}`;
+      return;
+    }
+
+    // 3. Direct Mac App / File Launcher check
     if (lower.startsWith("open ") || lower.startsWith("launch ")) {
-      const appName = text.replace(/^(open|launch)\s+/i, "").trim();
+      const targetName = text.replace(/^(open|launch)\s+/i, "").trim();
+      // Check if it matches a file node
+      let matchedFileNode = this.galaxy?.nodes.find(n => !n.userData.is_app && !n.userData.isHub && n.userData.name.toLowerCase() === targetName.toLowerCase());
+      if (matchedFileNode) {
+        const fileRes = await fetch("/api/tools/open_file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: matchedFileNode.userData.path }),
+        });
+        const fileData = await fileRes.json();
+        const reply = fileData.success
+          ? `Opening ${matchedFileNode.userData.name} on your Mac, sir.`
+          : `I attempted to open ${matchedFileNode.userData.name}, sir: ${fileData.message}`;
+        this.appendMessage("assistant", reply);
+        this.sessionHistory.push({ role: "assistant", content: reply });
+        this.speakResponse(reply);
+        this.reactorSubstatus.textContent = `Tool run: Open File`;
+        return;
+      }
+
+      // Otherwise launch application
       const appRes = await fetch("/api/tools/open_app", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ app_name: appName }),
+        body: JSON.stringify({ app_name: targetName }),
       });
       if (appRes.ok) {
         const appData = await appRes.json();
@@ -518,6 +744,7 @@ class FridayClient {
         return;
       }
     }
+
 
     // Send via WebSocket or HTTP
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {

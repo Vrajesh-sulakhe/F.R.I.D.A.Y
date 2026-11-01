@@ -115,6 +115,10 @@ class OpenAppRequest(BaseModel):
     app_name: str
 
 
+class PathActionRequest(BaseModel):
+    path: str
+
+
 @app.post("/api/tools/open_app")
 async def open_mac_app(payload: OpenAppRequest):
     """Open an installed macOS application."""
@@ -123,12 +127,46 @@ async def open_mac_app(payload: OpenAppRequest):
     return {"success": success, "app_name": resolved, "message": msg}
 
 
+@app.post("/api/tools/open_file")
+async def open_local_file(payload: PathActionRequest):
+    """Open any file or directory in its default macOS handler."""
+    from src.tools.mac_apps import MacAppLauncher
+    success, msg = MacAppLauncher.open_file_path(payload.path)
+    return {"success": success, "path": payload.path, "message": msg}
+
+
+@app.post("/api/tools/reveal_in_finder")
+async def reveal_in_finder(payload: PathActionRequest):
+    """Reveal any file, app, or directory in macOS Finder."""
+    from src.tools.mac_apps import MacAppLauncher
+    success, msg = MacAppLauncher.reveal_in_finder(payload.path)
+    return {"success": success, "path": payload.path, "message": msg}
+
+
+@app.get("/api/tools/read_file")
+async def read_local_file(path: str):
+    """Read local text content for preview or speech synthesis."""
+    from src.tools.mac_apps import MacAppLauncher
+    success, content = MacAppLauncher.read_file_preview(path)
+    if not success:
+        raise HTTPException(status_code=404, detail=content)
+    return {"success": True, "path": path, "content": content}
+
+
 @app.get("/api/tools/mac_apps")
 async def get_mac_apps():
     """List detected macOS applications."""
     from src.tools.mac_apps import MacAppLauncher
     apps = MacAppLauncher.get_installed_apps()
     return {"apps": sorted(list(set(apps.values())))}
+
+
+@app.get("/api/second_brain/graph")
+async def get_second_brain_graph():
+    """Scan and return real local macOS applications, files, and folders for the 3D galaxy."""
+    from src.second_brain import SecondBrainIndexer
+    return SecondBrainIndexer.scan_local_machine()
+
 
 
 @app.post("/api/voice/switch")

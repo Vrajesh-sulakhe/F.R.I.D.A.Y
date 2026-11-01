@@ -170,3 +170,39 @@ def test_mac_app_launcher():
     assert "apps" in data
     assert len(data["apps"]) > 5
 
+
+def test_second_brain_graph_endpoint():
+    res = client.get("/api/second_brain/graph")
+    assert res.status_code == 200
+    data = res.json()
+    assert "hubs" in data
+    assert "nodes" in data
+    assert "categories" in data
+    assert len(data["hubs"]) >= 6
+    assert len(data["nodes"]) > 50
+
+    # Verify that real apps and files are present in the nodes
+    app_nodes = [n for n in data["nodes"] if n.get("is_app")]
+    assert len(app_nodes) > 10
+
+    # Check for presence of category counts
+    assert "Applications" in data["categories"]
+    assert data["categories"]["Applications"] > 10
+
+
+def test_mac_file_tools():
+    # Test read_file on an existing project file
+    test_file = str(Path.cwd() / "src" / "main.py")
+    res = client.get(f"/api/tools/read_file?path={test_file}")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+    assert "FastAPI" in data["content"]
+
+    # Test reveal_in_finder endpoint
+    res = client.post("/api/tools/reveal_in_finder", json={"path": test_file})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+
+

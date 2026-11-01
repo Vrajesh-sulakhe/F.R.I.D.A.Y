@@ -1,6 +1,6 @@
 /**
- * FRIDAY 3D Galaxy Graph - Second Brain Three.js Visualization
- * Recreates the exact interactive 3D node galaxy from the Jarvis demo.
+ * FRIDAY 3D Galaxy Graph - Live Second Brain & macOS Application Visualizer
+ * Dynamically queries real local files, folders, and applications on the user's Mac.
  */
 
 class GalaxyGraph {
@@ -9,49 +9,50 @@ class GalaxyGraph {
     this.onNodeSelect = onNodeSelect;
     this.nodes = [];
     this.edges = [];
-    this.hubs = [
-      { name: "Skill Suites", color: 0x38bdf8, count: 236, pos: new THREE.Vector3(0, 0, 0) },
-      { name: "Local Businesses", color: 0xf59e0b, count: 123, pos: new THREE.Vector3(-180, 40, -60) },
-      { name: "AI Workshop", color: 0xeab308, count: 82, pos: new THREE.Vector3(160, -30, 80) },
-      { name: "Zubair OS", color: 0xa855f7, count: 51, pos: new THREE.Vector3(-120, -90, 100) },
-      { name: "Claude Code", color: 0x60a5fa, count: 48, pos: new THREE.Vector3(140, 90, -100) },
-      { name: "YouTube Channel", color: 0xef4444, count: 47, pos: new THREE.Vector3(-60, 140, 70) },
-      { name: "SEO Suite", color: 0xc084fc, count: 38, pos: new THREE.Vector3(80, -120, -80) },
-      { name: "Build and Sell series", color: 0x10b981, count: 37, pos: new THREE.Vector3(200, 20, 20) },
-    ];
-
-    this.categories = {
-      "Router": { color: 0x10b981, count: 1 },
-      "Wiki": { color: 0xeab308, count: 12 },
-      "Concepts": { color: 0xf1f5f9, count: 24 },
-      "Suites": { color: 0xa855f7, count: 13 },
-      "Skills": { color: 0x38bdf8, count: 197 },
-      "Tools": { color: 0xef4444, count: 19 },
-      "Worlds": { color: 0xf97316, count: 15 },
-      "Notes": { color: 0xfacc15, count: 68 },
-      "Files": { color: 0x64748b, count: 195 },
-    };
+    this.hubs = [];
+    this.categories = {};
 
     this.selectedNode = null;
-    this.viewMode = "ring"; // "ring", "cube", "face"
+    this.hoveredNode = null;
+    this.viewMode = "ring";
     this.repelForce = 1.0;
     this.linkLength = 1.0;
 
+    this.catColors = {
+      "Applications": 0x38bdf8,
+      "Projects": 0x10b981,
+      "Code": 0x60a5fa,
+      "Documents": 0xf97316,
+      "Presentations": 0xf43f5e,
+      "Notes": 0xfacc15,
+      "Data": 0xa855f7,
+      "Config": 0x34d399,
+      "Media": 0xec4899,
+      "Utilities": 0xef4444,
+      "Archives": 0x8b5cf6,
+      "Downloads": 0xf97316,
+      "Desktop": 0xec4899,
+      "Brain": 0xa855f7,
+      "Files": 0x94a3b8,
+      "Folders": 0xeab308,
+    };
+
     this.initScene();
-    this.generateGalaxyData();
+    this.createTooltipElement();
     this.setupEvents();
+    this.loadRealSystemGraph();
     this.animate();
   }
 
   initScene() {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x04060a, 0.0008);
+    this.scene.fog = new THREE.FogExp2(0x020408, 0.0006);
 
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
 
-    this.camera = new THREE.PerspectiveCamera(55, width / height, 1, 3000);
-    this.camera.position.set(0, 80, 520);
+    this.camera = new THREE.PerspectiveCamera(55, width / height, 1, 3500);
+    this.camera.position.set(0, 90, 560);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setSize(width, height);
@@ -62,37 +63,45 @@ class GalaxyGraph {
       this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
       this.controls.enableDamping = true;
       this.controls.dampingFactor = 0.05;
-      this.controls.maxDistance = 1200;
-      this.controls.minDistance = 60;
+      this.controls.maxDistance = 1400;
+      this.controls.minDistance = 50;
       this.controls.autoRotate = true;
-      this.controls.autoRotateSpeed = 0.35;
+      this.controls.autoRotateSpeed = 0.25;
     }
 
-    // Ambient and point lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
     this.scene.add(ambientLight);
 
-    const coreLight = new THREE.PointLight(0x38bdf8, 2, 800);
+    const coreLight = new THREE.PointLight(0x38bdf8, 2.5, 1000);
     coreLight.position.set(0, 0, 0);
     this.scene.add(coreLight);
 
-    // Starfield particles
     this.createStarfield();
 
-    // Raycaster for click selection
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
+
+    this.nodeGroup = new THREE.Group();
+    this.scene.add(this.nodeGroup);
+  }
+
+  createTooltipElement() {
+    this.tooltip = document.createElement("div");
+    this.tooltip.id = "graph-node-tooltip";
+    this.tooltip.className = "graph-hud-tooltip";
+    this.tooltip.style.display = "none";
+    document.body.appendChild(this.tooltip);
   }
 
   createStarfield() {
     const starGeo = new THREE.BufferGeometry();
-    const starCount = 1200;
+    const starCount = 1400;
     const starPos = new Float32Array(starCount * 3);
 
     for (let i = 0; i < starCount * 3; i += 3) {
-      starPos[i] = (Math.random() - 0.5) * 2200;
-      starPos[i + 1] = (Math.random() - 0.5) * 2200;
-      starPos[i + 2] = (Math.random() - 0.5) * 2200;
+      starPos[i] = (Math.random() - 0.5) * 2400;
+      starPos[i + 1] = (Math.random() - 0.5) * 2400;
+      starPos[i + 2] = (Math.random() - 0.5) * 2400;
     }
 
     starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
@@ -100,105 +109,173 @@ class GalaxyGraph {
       color: 0x64748b,
       size: 1.5,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.65,
     });
-    const starMesh = new THREE.Points(starGeo, starMat);
-    this.scene.add(starMesh);
+    this.scene.add(new THREE.Points(starGeo, starMat));
   }
 
-  generateGalaxyData() {
-    this.nodeGroup = new THREE.Group();
-    this.scene.add(this.nodeGroup);
+  async loadRealSystemGraph() {
+    try {
+      const res = await fetch("/api/second_brain/graph");
+      if (!res.ok) throw new Error("Failed to scan system");
+      const data = await res.json();
 
-    const sphereGeo = new THREE.SphereGeometry(1, 12, 12);
-    const catKeys = Object.keys(this.categories);
+      this.hubs = data.hubs || [];
+      this.categories = data.categories || {};
+      const realNodes = data.nodes || [];
+      const deepEdges = data.edges || [];
 
-    // 1. Create central Hub Nodes
-    this.hubs.forEach((hub, hIdx) => {
-      const hubMat = new THREE.MeshBasicMaterial({
-        color: hub.color,
-        wireframe: false,
-      });
+      this.buildGalaxyFromRealData(this.hubs, realNodes, deepEdges);
+
+      // Trigger UI callback to update Top Hubs & Filter cards
+      if (window.friday) {
+        window.friday.renderRealHubsList(this.hubs);
+        window.friday.renderRealFilterList(this.categories);
+      }
+    } catch (e) {
+      console.warn("Second brain scan failed:", e);
+    }
+  }
+
+  buildGalaxyFromRealData(hubs, realNodes, deepEdges = []) {
+    // Clear existing
+    while (this.nodeGroup.children.length > 0) {
+      this.nodeGroup.remove(this.nodeGroup.children[0]);
+    }
+    this.nodes = [];
+    this.edges = [];
+
+    const sphereGeo = new THREE.SphereGeometry(1, 16, 16);
+    const hubMeshMap = {};
+    const nodeMeshMap = {};
+
+    // 1. Create Hub Meshes
+    hubs.forEach((hub, hIdx) => {
+      const color = hub.color || this.catColors[hub.category] || 0x38bdf8;
+      const hubMat = new THREE.MeshBasicMaterial({ color: color });
       const hubMesh = new THREE.Mesh(sphereGeo, hubMat);
-      hubMesh.scale.setScalar(6.5);
-      hubMesh.position.copy(hub.pos);
+
+      hubMesh.scale.setScalar(8.0);
+      hubMesh.position.set(hub.pos.x, hub.pos.y, hub.pos.z);
       hubMesh.userData = {
-        id: `hub_${hIdx}`,
+        id: hub.id || `hub_${hIdx}`,
         name: hub.name,
         type: "Hub",
-        category: "Suites",
+        category: hub.category,
         count: hub.count,
-        summary: `Central cluster coordinating ${hub.count} second brain concepts, notes, and local pipelines.`,
+        path: hub.path,
+        summary: `Local hub scanning: ${hub.path}. Contains ${hub.count} indexed items on your Mac.`,
         isHub: true,
       };
+
       this.nodeGroup.add(hubMesh);
       this.nodes.push(hubMesh);
+      hubMeshMap[hub.name] = hubMesh;
+      hubMeshMap[hub.id] = hubMesh;
 
-      // Hub 3D floating sprite label
-      const labelSprite = this.createTextSprite(hub.name, hub.color);
-      labelSprite.position.set(hub.pos.x, hub.pos.y + 12, hub.pos.z);
-      this.nodeGroup.add(labelSprite);
+      // 3D Floating Sprite Label
+      const sprite = this.createTextSprite(hub.name, color);
+      sprite.position.set(hub.pos.x, hub.pos.y + 15, hub.pos.z);
+      this.nodeGroup.add(sprite);
 
-      // 2. Spawn satellite nodes around each hub
-      const satelliteCount = Math.min(Math.floor(hub.count / 3), 45);
-      for (let s = 0; s < satelliteCount; s++) {
-        const radius = 35 + Math.random() * 80;
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos((Math.random() * 2) - 1);
+      // Orbital Halo Ring around major Hub
+      const ringGeo = new THREE.RingGeometry(11, 12, 32);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: color,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.35,
+      });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.position.set(hub.pos.x, hub.pos.y, hub.pos.z);
+      ringMesh.rotation.x = Math.PI / 2;
+      this.nodeGroup.add(ringMesh);
+    });
 
-        const nodePos = new THREE.Vector3(
-          hub.pos.x + radius * Math.sin(phi) * Math.cos(theta),
-          hub.pos.y + radius * Math.sin(phi) * Math.sin(theta),
-          hub.pos.z + radius * Math.cos(phi)
-        );
-
-        const cat = catKeys[Math.floor(Math.random() * catKeys.length)];
-        const catColor = this.categories[cat].color;
-
-        const nodeMat = new THREE.MeshBasicMaterial({
-          color: catColor,
-          transparent: true,
-          opacity: 0.9,
-        });
-        const nodeMesh = new THREE.Mesh(sphereGeo, nodeMat);
-        const nodeSize = 2.2 + Math.random() * 2.2;
-        nodeMesh.scale.setScalar(nodeSize);
-        nodeMesh.position.copy(nodePos);
-
-        const nodeId = `node_${hIdx}_${s}`;
-        const nodeName = `${hub.name} / ${cat} #${s + 1}`;
-        nodeMesh.userData = {
-          id: nodeId,
-          name: nodeName,
-          type: cat,
-          category: cat,
-          hub: hub.name,
-          summary: `Knowledge node in ${hub.name}. Indexed for fast retrieval and semantic traversal, sir.`,
-          hubMesh: hubMesh,
-        };
-
-        this.nodeGroup.add(nodeMesh);
-        this.nodes.push(nodeMesh);
-
-        // Connect satellite to hub with line
+    // 2. Connect Hubs into central galaxy backbone
+    for (let i = 0; i < hubs.length - 1; i++) {
+      if (this.nodes[i] && this.nodes[i + 1]) {
         this.edges.push({
-          start: hubMesh,
-          end: nodeMesh,
-          color: hub.color,
+          start: this.nodes[i],
+          end: this.nodes[i + 1],
+          color: 0x38bdf8,
+        });
+      }
+    }
+
+    // 3. Create Real Local Nodes around their respective Hubs
+    realNodes.forEach((item, nIdx) => {
+      const parentHub = hubMeshMap[item.hub] || hubMeshMap[item.hub_id] || this.nodes[0];
+      if (!parentHub) return;
+
+      const hubPos = parentHub.position;
+      const radius = 30 + (Math.random() * 85);
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+
+      const nodePos = new THREE.Vector3(
+        hubPos.x + radius * Math.sin(phi) * Math.cos(theta),
+        hubPos.y + radius * Math.sin(phi) * Math.sin(theta),
+        hubPos.z + radius * Math.cos(phi)
+      );
+
+      const catColor = this.catColors[item.category] || 0x94a3b8;
+      const nodeMat = new THREE.MeshBasicMaterial({
+        color: catColor,
+        transparent: true,
+        opacity: 0.9,
+      });
+
+      const nodeMesh = new THREE.Mesh(sphereGeo, nodeMat);
+      const nodeScale = item.is_app ? 4.5 : (item.is_dir ? 3.5 : 2.5);
+      nodeMesh.scale.setScalar(nodeScale);
+      nodeMesh.position.copy(nodePos);
+
+      nodeMesh.userData = {
+        id: item.id || `node_${nIdx}`,
+        name: item.name,
+        type: item.type,
+        category: item.category,
+        path: item.path,
+        hub: item.hub,
+        is_app: item.is_app,
+        is_dir: item.is_dir,
+        size_bytes: item.size_bytes,
+        size_human: item.size_human,
+        mtime: item.mtime,
+        summary: item.summary,
+        is_text_readable: item.is_text_readable,
+        parent_project: item.parent_project,
+        parent_node_id: item.parent_node_id,
+        hubMesh: parentHub,
+      };
+
+      this.nodeGroup.add(nodeMesh);
+      this.nodes.push(nodeMesh);
+      nodeMeshMap[item.id] = nodeMesh;
+
+      // Connect node to parent hub
+      this.edges.push({
+        start: parentHub,
+        end: nodeMesh,
+        color: catColor,
+      });
+    });
+
+    // 4. Connect hierarchical sub-edges (e.g. project folder -> its files)
+    deepEdges.forEach((e) => {
+      const srcMesh = nodeMeshMap[e.source];
+      const tgtMesh = nodeMeshMap[e.target];
+      if (srcMesh && tgtMesh) {
+        this.edges.push({
+          start: srcMesh,
+          end: tgtMesh,
+          color: this.catColors[e.category] || 0x10b981,
         });
       }
     });
 
-    // 3. Connect related hubs to each other
-    for (let i = 0; i < this.hubs.length - 1; i++) {
-      this.edges.push({
-        start: this.nodes[i],
-        end: this.nodes[i + 1],
-        color: 0x38bdf8,
-      });
-    }
-
-    // 4. Build line geometry for edges
+    // 5. Generate line geometry
     this.createEdgeLines();
   }
 
@@ -254,18 +331,17 @@ class GalaxyGraph {
     ctx.fillText(text, 128, 32);
 
     const texture = new THREE.CanvasTexture(canvas);
-    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.85 });
+    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.88 });
     const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(36, 9, 1);
+    sprite.scale.set(38, 9.5, 1);
     return sprite;
   }
 
   setupEvents() {
     window.addEventListener("resize", () => this.onWindowResize());
-
     this.renderer.domElement.addEventListener("click", (e) => this.onCanvasClick(e));
+    this.renderer.domElement.addEventListener("pointermove", (e) => this.onCanvasPointerMove(e));
 
-    // Force sliders
     const repelSlider = document.getElementById("repel-slider");
     if (repelSlider) {
       repelSlider.addEventListener("input", (e) => {
@@ -282,7 +358,6 @@ class GalaxyGraph {
       });
     }
 
-    // View mode selector pills
     document.querySelectorAll(".mode-pill").forEach((pill) => {
       pill.addEventListener("click", () => {
         document.querySelectorAll(".mode-pill").forEach(p => p.classList.remove("active"));
@@ -291,11 +366,8 @@ class GalaxyGraph {
       });
     });
 
-    // Fit button
-    const fitBtn = document.getElementById("fit-graph-btn");
-    if (fitBtn) {
-      fitBtn.addEventListener("click", () => this.fitView());
-    }
+    document.getElementById("fit-graph-btn")?.addEventListener("click", () => this.fitView());
+    document.getElementById("reset-view-btn")?.addEventListener("click", () => this.fitView());
   }
 
   updateGraphForces() {
@@ -303,7 +375,7 @@ class GalaxyGraph {
       if (!node.userData.isHub && node.userData.hubMesh) {
         const hubPos = node.userData.hubMesh.position;
         const dir = node.position.clone().sub(hubPos).normalize();
-        const dist = 50 * this.linkLength + (Math.random() * 40 * this.repelForce);
+        const dist = 45 * this.linkLength + (Math.random() * 45 * this.repelForce);
         node.position.copy(hubPos.clone().add(dir.multiplyScalar(dist)));
       }
     });
@@ -313,18 +385,18 @@ class GalaxyGraph {
   setViewMode(mode) {
     this.viewMode = mode;
     if (mode === "ring") {
-      this.camera.position.set(0, 80, 520);
+      this.camera.position.set(0, 90, 560);
     } else if (mode === "cube") {
-      this.camera.position.set(380, 280, 380);
+      this.camera.position.set(400, 300, 400);
     } else if (mode === "face") {
-      this.camera.position.set(0, 0, 340);
+      this.camera.position.set(0, 0, 360);
     }
     if (this.controls) this.controls.target.set(0, 0, 0);
   }
 
   fitView() {
     if (this.controls) {
-      this.camera.position.set(0, 80, 520);
+      this.camera.position.set(0, 90, 560);
       this.controls.target.set(0, 0, 0);
       this.controls.update();
     }
@@ -336,8 +408,43 @@ class GalaxyGraph {
       this.selectNode(hubNode);
       if (this.controls) {
         this.controls.target.copy(hubNode.position);
-        this.camera.position.set(hubNode.position.x, hubNode.position.y + 40, hubNode.position.z + 180);
+        this.camera.position.set(hubNode.position.x, hubNode.position.y + 50, hubNode.position.z + 200);
         this.controls.update();
+      }
+    }
+  }
+
+  onCanvasPointerMove(e) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.nodes);
+
+    if (intersects.length > 0) {
+      const top = intersects[0].object;
+      this.hoveredNode = top;
+      this.container.style.cursor = "pointer";
+
+      // Show Tooltip
+      if (this.tooltip) {
+        const u = top.userData;
+        const icon = u.is_app ? "💻" : (u.is_dir ? "📁" : "📄");
+        this.tooltip.innerHTML = `
+          <div class="tooltip-title">${icon} ${u.name}</div>
+          <div class="tooltip-meta">${u.category} • ${u.size_human || u.type || ''}</div>
+          <div class="tooltip-hub">${u.hub || 'Mac Local'}</div>
+        `;
+        this.tooltip.style.left = `${e.clientX + 14}px`;
+        this.tooltip.style.top = `${e.clientY + 14}px`;
+        this.tooltip.style.display = "block";
+      }
+    } else {
+      this.hoveredNode = null;
+      this.container.style.cursor = "default";
+      if (this.tooltip) {
+        this.tooltip.style.display = "none";
       }
     }
   }
@@ -351,22 +458,20 @@ class GalaxyGraph {
     const intersects = this.raycaster.intersectObjects(this.nodes);
 
     if (intersects.length > 0) {
-      const clickedMesh = intersects[0].object;
-      this.selectNode(clickedMesh);
+      this.selectNode(intersects[0].object);
     }
   }
 
   selectNode(mesh) {
     this.selectedNode = mesh;
 
-    // Highlight clicked node and dim others
     this.nodes.forEach((n) => {
       if (n === mesh) {
         n.material.opacity = 1.0;
-        n.scale.setScalar(n.userData.isHub ? 8.5 : 4.5);
+        n.scale.setScalar(n.userData.isHub ? 10.0 : 6.0);
       } else {
         n.material.opacity = 0.35;
-        n.scale.setScalar(n.userData.isHub ? 6.5 : 2.5);
+        n.scale.setScalar(n.userData.isHub ? 7.5 : (n.userData.is_app ? 4.2 : (n.userData.is_dir ? 3.2 : 2.3)));
       }
     });
 
@@ -380,20 +485,24 @@ class GalaxyGraph {
     if (!q) {
       this.nodes.forEach(n => {
         n.material.opacity = 0.9;
-        n.scale.setScalar(n.userData.isHub ? 6.5 : 2.5);
+        n.scale.setScalar(n.userData.isHub ? 8.0 : (n.userData.is_app ? 4.5 : (n.userData.is_dir ? 3.5 : 2.5)));
       });
       return;
     }
 
     let matchCount = 0;
     this.nodes.forEach(n => {
-      const match = n.userData.name.toLowerCase().includes(q) || n.userData.type.toLowerCase().includes(q);
-      if (match) {
+      const nameMatch = n.userData.name.toLowerCase().includes(q);
+      const typeMatch = (n.userData.type || "").toLowerCase().includes(q);
+      const catMatch = (n.userData.category || "").toLowerCase().includes(q);
+      const pathMatch = (n.userData.path || "").toLowerCase().includes(q);
+
+      if (nameMatch || typeMatch || catMatch || pathMatch) {
         n.material.opacity = 1.0;
-        n.scale.setScalar(n.userData.isHub ? 9.0 : 5.0);
+        n.scale.setScalar(n.userData.isHub ? 10.0 : 6.0);
         matchCount++;
       } else {
-        n.material.opacity = 0.15;
+        n.material.opacity = 0.12;
         n.scale.setScalar(n.userData.isHub ? 5.0 : 1.8);
       }
     });
