@@ -138,3 +138,16 @@ def test_voice_switching():
     data = res.json()
     assert data["active_voice"] == "Jarvis (Local)"
 
+
+@pytest.mark.anyio
+async def test_openrouter_dynamic_discovery():
+    models = await llm_manager.discover_openrouter_models()
+    assert len(models) > 50
+    free_models = [m for m in models if m.get("is_free")]
+    assert len(free_models) >= 1
+    # Check that providers endpoint includes models_details and free_models_count
+    status = llm_manager.get_providers_status()
+    openrouter_info = next(p for p in status["providers"] if p["id"] == "openrouter")
+    assert openrouter_info["total_models_count"] > 50
+    assert openrouter_info["free_models_count"] >= 1
+

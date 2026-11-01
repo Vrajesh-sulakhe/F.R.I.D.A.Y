@@ -32,10 +32,10 @@ class TokenTracker:
     @staticmethod
     def calculate_cost(provider_id: str, model: str, prompt_tokens: int, completion_tokens: int) -> float:
         """Calculate estimated cost. Local models and free-tier are always $0.00."""
-        if "local" in provider_id.lower() or "ollama" in provider_id.lower():
+        model_key = model.lower()
+        if "local" in provider_id.lower() or "ollama" in provider_id.lower() or ":free" in model_key:
             return 0.0
 
-        model_key = model.lower()
         pricing = None
 
         for key, price_tuple in PRICING_PER_MILLION.items():

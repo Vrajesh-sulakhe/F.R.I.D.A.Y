@@ -138,8 +138,9 @@ async def fresh_session():
 
 @app.get("/api/providers")
 async def list_providers():
-    """List all configured LLM providers, dynamically discovering local models if available."""
+    """List all configured LLM providers, dynamically discovering local and cloud models."""
     await llm_manager.discover_ollama_models()
+    await llm_manager.discover_openrouter_models()
     return llm_manager.get_providers_status()
 
 
@@ -163,9 +164,11 @@ async def switch_provider(payload: ProviderSwitchRequest):
 
 @app.post("/api/providers/key")
 async def update_provider_key(payload: ProviderKeyUpdateRequest):
-    """Safely update an API key in .env and reload provider."""
+    """Safely update an API key in .env and reload provider with immediate model discovery."""
     try:
         llm_manager.update_provider_api_key(payload.provider_id, payload.api_key)
+        if payload.provider_id == "openrouter":
+            await llm_manager.discover_openrouter_models(force=True)
         return {"status": "success", "message": f"API key for {payload.provider_id} updated successfully."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

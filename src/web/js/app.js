@@ -467,44 +467,152 @@ class FridayClient {
       const card = document.createElement("div");
       card.className = `provider-card ${p.id === activeProvId ? "active-card" : ""}`;
 
+      const totalCount = p.total_models_count || p.models?.length || 0;
+      const freeCount = p.free_models_count || 0;
+
       const head = document.createElement("div");
       head.className = "provider-head";
       head.innerHTML = `
-        <div>
+        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.4rem;">
           <span class="provider-title">${p.name}</span>
-          <span style="font-size:0.75rem; color:${p.is_configured ? '#10b981' : '#f43f5e'}; margin-left:0.5rem;">
+          <span style="font-size:0.75rem; color:${p.is_configured ? '#10b981' : '#f43f5e'};">
             ${p.is_configured ? '● Configured' : '○ Missing Key'}
           </span>
+          ${totalCount > 0 ? `<span class="model-count-badge">${totalCount} Models</span>` : ''}
+          ${freeCount > 0 ? `<span class="free-badge">🎁 ${freeCount} Free</span>` : ''}
         </div>
       `;
+      card.appendChild(head);
 
-      const actions = document.createElement("div");
-      actions.className = "provider-actions";
+      // Model selector with search and free-filtering
+      const modelContainer = document.createElement("div");
+      modelContainer.className = "model-selector-container";
 
-      // Select model dropdown
+      // Filter row
+      const filterRow = document.createElement("div");
+      filterRow.className = "model-filter-row";
+
+      const searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.className = "model-filter-input";
+      searchInput.placeholder = `🔍 Search ${totalCount} models (e.g. 'free', 'claude', 'deepseek', 'llama')...`;
+
+      const allBtn = document.createElement("button");
+      allBtn.className = "model-filter-btn active";
+      allBtn.textContent = `All (${totalCount})`;
+
+      const freeBtn = document.createElement("button");
+      freeBtn.className = "model-filter-btn";
+      freeBtn.textContent = `🎁 Free Only (${freeCount})`;
+
+      filterRow.appendChild(searchInput);
+      if (freeCount > 0) {
+        filterRow.appendChild(allBtn);
+        filterRow.appendChild(freeBtn);
+      }
+      modelContainer.appendChild(filterRow);
+
+      // Select dropdown
       const select = document.createElement("select");
-      select.className = "action-btn";
-      p.models.forEach((m) => {
-        const opt = document.createElement("option");
-        opt.value = m;
-        opt.textContent = m;
-        if (p.id === activeProvId && m === currentModel) opt.selected = true;
-        select.appendChild(opt);
+      select.className = "model-select-dropdown";
+
+      const modelsDetails = p.models_details && p.models_details.length > 0 
+        ? p.models_details 
+        : p.models.map(m => ({ id: m, name: m, is_free: m.includes(":free") }));
+
+      let filterFreeOnly = false;
+      let filterQuery = "";
+
+      const populateOptions = () => {
+        select.innerHTML = "";
+        const query = filterQuery.toLowerCase().trim();
+
+        const filtered = modelsDetails.filter((m) => {
+          if (filterFreeOnly && !m.is_free) return false;
+          if (query) {
+            return m.id.toLowerCase().includes(query) || (m.name && m.name.toLowerCase().includes(query));
+          }
+          return true;
+        });
+
+        const freeGroup = filtered.filter(m => m.is_free);
+        const regularGroup = filtered.filter(m => !m.is_free);
+
+        if (freeGroup.length > 0) {
+          const optGroup = document.createElement("optgroup");
+          optGroup.label = `🎁 Free Models (Zero API Cost) — ${freeGroup.length} available`;
+          freeGroup.forEach((m) => {
+            const opt = document.createElement("option");
+            opt.value = m.id;
+            opt.textContent = `[FREE] ${m.name || m.id}`;
+            if (p.id === activeProvId && m.id === currentModel) opt.selected = true;
+            optGroup.appendChild(opt);
+          });
+          select.appendChild(optGroup);
+        }
+
+        if (regularGroup.length > 0) {
+          const optGroup = document.createElement("optgroup");
+          optGroup.label = `⚡ Commercial & Flagship Models — ${regularGroup.length} available`;
+          regularGroup.forEach((m) => {
+            const opt = document.createElement("option");
+            opt.value = m.id;
+            opt.textContent = `${m.name || m.id}`;
+            if (p.id === activeProvId && m.id === currentModel) opt.selected = true;
+            optGroup.appendChild(opt);
+          });
+          select.appendChild(optGroup);
+        }
+
+        if (filtered.length === 0) {
+          const opt = document.createElement("option");
+          opt.textContent = "No models matching filter";
+          opt.disabled = true;
+          select.appendChild(opt);
+        }
+      };
+
+      populateOptions();
+
+      // Search listeners
+      searchInput.addEventListener("input", (e) => {
+        filterQuery = e.target.value;
+        populateOptions();
       });
 
-      // Activate button
+      allBtn.addEventListener("click", () => {
+        filterFreeOnly = false;
+        allBtn.classList.add("active");
+        freeBtn.classList.remove("active");
+        populateOptions();
+      });
+
+      freeBtn.addEventListener("click", () => {
+        filterFreeOnly = true;
+        freeBtn.classList.add("active");
+        allBtn.classList.remove("active");
+        populateOptions();
+      });
+
+      modelContainer.appendChild(select);
+
+      // Model action buttons
+      const actionsRow = document.createElement("div");
+      actionsRow.className = "model-actions-row";
+
       const activateBtn = document.createElement("button");
       activateBtn.className = `action-btn ${p.id === activeProvId ? "primary" : ""}`;
-      activateBtn.textContent = p.id === activeProvId ? "Active Brain" : "Activate";
+      activateBtn.textContent = p.id === activeProvId ? "Active Brain" : "Activate Selected Model";
       activateBtn.addEventListener("click", async () => {
+        if (!select.value || select.value === "No models matching filter") return;
         await this.switchProvider(p.id, select.value);
       });
 
-      // Test Connection button
       const testBtn = document.createElement("button");
       testBtn.className = "action-btn";
-      testBtn.textContent = "Test Link";
+      testBtn.textContent = "Test Link with Selected";
       testBtn.addEventListener("click", async () => {
+        if (!select.value || select.value === "No models matching filter") return;
         testBtn.textContent = "Testing...";
         const tRes = await fetch("/api/providers/test", {
           method: "POST",
@@ -513,14 +621,13 @@ class FridayClient {
         });
         const tData = await tRes.json();
         alert(`[${p.name}] ${tData.success ? 'Success' : 'Failed'}: ${tData.message}`);
-        testBtn.textContent = "Test Link";
+        testBtn.textContent = "Test Link with Selected";
       });
 
-      actions.appendChild(select);
-      actions.appendChild(activateBtn);
-      actions.appendChild(testBtn);
-      head.appendChild(actions);
-      card.appendChild(head);
+      actionsRow.appendChild(activateBtn);
+      actionsRow.appendChild(testBtn);
+      modelContainer.appendChild(actionsRow);
+      card.appendChild(modelContainer);
 
       // Key input row (for commercial providers)
       if (p.id !== "ollama_local") {
@@ -528,7 +635,7 @@ class FridayClient {
         keyRow.className = "key-input-row";
         keyRow.innerHTML = `
           <input type="password" placeholder="${p.masked_key ? 'Key configured: ' + p.masked_key : 'Paste API Key here...'}" id="key-input-${p.id}">
-          <button class="action-btn" id="save-key-btn-${p.id}">Save Key</button>
+          <button class="action-btn" id="save-key-btn-${p.id}">Save Key & Discover Models</button>
         `;
         card.appendChild(keyRow);
 
@@ -539,15 +646,24 @@ class FridayClient {
             saveBtn.addEventListener("click", async () => {
               const newKey = input.value.trim();
               if (!newKey) return;
-              const res = await fetch("/api/providers/key", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ provider_id: p.id, api_key: newKey }),
-              });
-              const rData = await res.json();
-              alert(rData.message);
-              input.value = "";
-              this.loadProvidersSettings();
+              saveBtn.textContent = "Discovering Models...";
+              saveBtn.disabled = true;
+              try {
+                const res = await fetch("/api/providers/key", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ provider_id: p.id, api_key: newKey }),
+                });
+                const rData = await res.json();
+                input.value = "";
+                await this.loadProvidersSettings();
+                alert(`${rData.message}\nModels catalog dynamically updated!`);
+              } catch (err) {
+                alert(`Error saving key: ${err.message}`);
+              } finally {
+                saveBtn.textContent = "Save Key & Discover Models";
+                saveBtn.disabled = false;
+              }
             });
           }
         }, 0);

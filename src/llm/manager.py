@@ -155,6 +155,68 @@ class LLMManager:
             pass
         return self.providers.get("ollama_local", None).default_models if "ollama_local" in self.providers else []
 
+    async def discover_openrouter_models(self, force: bool = False) -> list[dict[str, Any]]:
+        """Dynamically query OpenRouter API for all available models including free models."""
+        prov = self.providers.get("openrouter")
+        if not prov:
+            return []
+
+        # Return cached if recent and not forced
+        if not force and hasattr(prov, "models_details") and getattr(prov, "models_details", None):
+            return prov.models_details
+
+        headers = {
+            "HTTP-Referer": "http://localhost:4719",
+            "X-Title": "FRIDAY AI Assistant",
+        }
+        if prov.api_key:
+            headers["Authorization"] = f"Bearer {prov.api_key}"
+
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                res = await client.get("https://openrouter.ai/api/v1/models", headers=headers)
+                if res.status_code == 200:
+                    payload = res.json()
+                    raw_models = payload.get("data", [])
+                    free_models = []
+                    paid_models = []
+
+                    for m in raw_models:
+                        mid = m.get("id", "")
+                        name = m.get("name", mid)
+                        pricing = m.get("pricing", {})
+                        try:
+                            prompt_p = float(pricing.get("prompt", 1.0) or 1.0)
+                            comp_p = float(pricing.get("completion", 1.0) or 1.0)
+                        except (ValueError, TypeError):
+                            prompt_p, comp_p = 1.0, 1.0
+
+                        is_free = ":free" in mid.lower() or (prompt_p == 0.0 and comp_p == 0.0)
+
+                        item = {
+                            "id": mid,
+                            "name": name,
+                            "is_free": is_free,
+                            "context_length": m.get("context_length", 0),
+                        }
+                        if is_free:
+                            free_models.append(item)
+                        else:
+                            paid_models.append(item)
+
+                    free_models.sort(key=lambda x: x["name"].lower())
+                    paid_models.sort(key=lambda x: x["name"].lower())
+
+                    all_models_details = free_models + paid_models
+                    prov.models_details = all_models_details
+                    prov.default_models = [m["id"] for m in all_models_details]
+                    return all_models_details
+        except Exception as e:
+            logger.warning(f"Failed to dynamically query OpenRouter models: {e}")
+
+        return getattr(prov, "models_details", [])
+
     def get_system_state(self) -> dict[str, Any]:
         """Provide 100% dynamic configuration and state for the frontend."""
         prov, model = self.get_active_provider()
@@ -473,11 +535,17 @@ class LLMManager:
                 else:
                     masked_key = "••••••••"
 
+            models_details = getattr(prov, "models_details", [])
+            free_count = sum(1 for m in models_details if m.get("is_free"))
+
             providers_out.append({
                 "id": pid,
                 "name": prov.name,
                 "base_url": prov.base_url,
                 "models": prov.default_models,
+                "models_details": models_details,
+                "free_models_count": free_count,
+                "total_models_count": len(prov.default_models),
                 "is_active": (pid == self.active_provider_id),
                 "is_configured": has_key or (pid == "ollama_local"),
                 "masked_key": masked_key,
