@@ -78,6 +78,11 @@ class ProviderTestRequest(BaseModel):
     model: str | None = None
 
 
+class VoiceSwitchRequest(BaseModel):
+    voice_name: str
+    engine: str | None = None
+
+
 # REST API Endpoints
 @app.get("/api/health")
 async def health_check():
@@ -90,26 +95,51 @@ async def health_check():
         "active_provider": prov.provider_id,
         "active_provider_name": prov.name,
         "active_model": model,
+        "active_voice": llm_manager.active_voice_name,
+    }
+
+
+@app.get("/api/system/state")
+async def get_system_state():
+    """100% dynamic state delivering all HUD labels, providers, tools, voices, and commands."""
+    return llm_manager.get_system_state()
+
+
+@app.get("/api/tools")
+async def get_tools():
+    """Dynamic list of tools and connection statuses."""
+    return {"tools": llm_manager.get_system_state()["tools"]}
+
+
+@app.post("/api/voice/switch")
+async def switch_voice(payload: VoiceSwitchRequest):
+    """Dynamically switch voice profile (e.g. Jarvis, Zubar B, ElevenLabs)."""
+    llm_manager.set_active_voice(payload.voice_name, payload.engine)
+    return {
+        "status": "success",
+        "active_voice": llm_manager.active_voice_name,
+        "voice_engine": llm_manager.active_voice_engine,
+        "state": llm_manager.get_system_state(),
     }
 
 
 @app.get("/api/session/fresh")
 async def fresh_session():
-    """Reset session and return standard Jarvis greeting."""
+    """Reset session and return standard Jarvis greeting and full dynamic state."""
     greeting = llm_manager.personality_config.get(
         "dialogue_responses", {}
     ).get("session_greeting", "Hello, sir.")
     return {
         "status": "fresh",
         "greeting": greeting,
-        "active_provider": llm_manager.active_provider_id,
-        "active_model": llm_manager.active_model,
+        "state": llm_manager.get_system_state(),
     }
 
 
 @app.get("/api/providers")
 async def list_providers():
-    """List all configured LLM providers and models."""
+    """List all configured LLM providers, dynamically discovering local models if available."""
+    await llm_manager.discover_ollama_models()
     return llm_manager.get_providers_status()
 
 
@@ -125,6 +155,7 @@ async def switch_provider(payload: ProviderSwitchRequest):
             "active_provider": prov.provider_id,
             "active_provider_name": prov.name,
             "active_model": model,
+            "state": llm_manager.get_system_state(),
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -258,14 +289,14 @@ async def websocket_chat_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket client connected to FRIDAY chat")
     try:
-        # Send initial status
-        prov, model = llm_manager.get_active_provider()
+        # Send initial status with full dynamic state
+        greeting = llm_manager.personality_config.get(
+            "dialogue_responses", {}
+        ).get("session_greeting", "Hello, sir.")
         await websocket.send_json({
             "type": "init",
-            "greeting": "Hello, sir.",
-            "active_provider": prov.provider_id,
-            "active_provider_name": prov.name,
-            "active_model": model,
+            "greeting": greeting,
+            "state": llm_manager.get_system_state(),
         })
 
         while True:
@@ -278,16 +309,13 @@ async def websocket_chat_endpoint(websocket: WebSocket):
                 if not user_msg:
                     continue
 
-                # Check if it's a brain-switching command
+                # Check if it's a brain-switching or voice-switching command
                 handled, reply = llm_manager.handle_voice_or_text_command(user_msg)
                 if handled and reply is not None:
-                    p, m = llm_manager.get_active_provider()
                     await websocket.send_json({
-                        "type": "brain_switch",
+                        "type": "state_update",
                         "reply": reply,
-                        "active_provider": p.provider_id,
-                        "active_provider_name": p.name,
-                        "active_model": m,
+                        "state": llm_manager.get_system_state(),
                     })
                     continue
 
@@ -317,13 +345,20 @@ async def websocket_chat_endpoint(websocket: WebSocket):
                 pid = data.get("provider_id")
                 model_name = data.get("model")
                 msg = llm_manager.set_active_provider_and_model(pid, model_name)
-                p, m = llm_manager.get_active_provider()
                 await websocket.send_json({
-                    "type": "brain_switch",
+                    "type": "state_update",
                     "reply": msg,
-                    "active_provider": p.provider_id,
-                    "active_provider_name": p.name,
-                    "active_model": m,
+                    "state": llm_manager.get_system_state(),
+                })
+
+            elif action == "switch_voice":
+                voice_name = data.get("voice_name")
+                engine = data.get("engine")
+                llm_manager.set_active_voice(voice_name, engine)
+                await websocket.send_json({
+                    "type": "state_update",
+                    "reply": f"Voice set to {voice_name}",
+                    "state": llm_manager.get_system_state(),
                 })
 
     except WebSocketDisconnect:

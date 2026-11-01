@@ -103,3 +103,38 @@ def test_token_tracker_cost_calculation():
     # Claude 3.5 Sonnet: $3 / $15 per million
     claude_cost = TokenTracker.calculate_cost("anthropic", "claude-3-5-sonnet-latest", 1_000_000, 1_000_000)
     assert claude_cost == 18.0
+
+
+def test_dynamic_system_state():
+    res = client.get("/api/system/state")
+    assert res.status_code == 200
+    data = res.json()
+    assert "identity" in data
+    assert data["identity"]["title"] == "F.R.I.D.A.Y."
+    assert "brain" in data
+    assert "voice" in data
+    assert "tools" in data
+    assert len(data["tools"]) >= 3
+    assert "quick_commands" in data
+    assert len(data["quick_commands"]) >= 5
+
+
+def test_voice_switching():
+    # 1. Switch to local voice
+    handled, reply = llm_manager.handle_voice_or_text_command("Switch to your local voice")
+    assert handled is True
+    assert "How do I sound, sir? This is my local voice." in reply
+    assert llm_manager.active_voice_name == "Jarvis"
+
+    # 2. Switch voice to Zubar B
+    handled, reply = llm_manager.handle_voice_or_text_command("Switch your voice to Zubar B")
+    assert handled is True
+    assert "How do I sound, sir? This is Zubar B." in reply
+    assert llm_manager.active_voice_name == "Zubar B"
+
+    # 3. Switch via API
+    res = client.post("/api/voice/switch", json={"voice_name": "Jarvis (Local)", "engine": "voice_studio"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["active_voice"] == "Jarvis (Local)"
+

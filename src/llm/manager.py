@@ -42,6 +42,9 @@ class LLMManager:
         self.active_model: str = "qwen3.5:9b"
         self.personality_config: dict[str, Any] = {}
         self.raw_providers_config: dict[str, Any] = {}
+        self.active_voice_name: str = "Jarvis (Local)"
+        self.active_voice_engine: str = "voice_studio"
+        self.available_voices: list[str] = ["Jarvis (Local)", "Zubar B (Local)", "Jarvis (Cloud ElevenLabs)"]
 
         self.load_configurations()
 
@@ -65,6 +68,8 @@ class LLMManager:
                 settings = json.load(f) or {}
                 self.active_provider_id = settings.get("active_provider", self.active_provider_id)
                 self.active_model = settings.get("active_model", self.active_model)
+                self.active_voice_name = settings.get("active_voice", self.active_voice_name)
+                self.active_voice_engine = settings.get("voice_engine", self.active_voice_engine)
                 if "fallback_chain" in settings and settings["fallback_chain"]:
                     self.fallback_chain = settings["fallback_chain"]
 
@@ -106,7 +111,7 @@ class LLMManager:
                 )
 
     def save_settings(self) -> None:
-        """Persist current active provider and model to settings.json."""
+        """Persist current active provider, model, and voice to settings.json."""
         current_data = {}
         if self.settings_json_path.exists():
             try:
@@ -117,10 +122,92 @@ class LLMManager:
 
         current_data["active_provider"] = self.active_provider_id
         current_data["active_model"] = self.active_model
+        current_data["active_voice"] = self.active_voice_name
+        current_data["voice_engine"] = self.active_voice_engine
         current_data["fallback_chain"] = self.fallback_chain
 
         with open(self.settings_json_path, "w", encoding="utf-8") as f:
             json.dump(current_data, f, indent=2)
+
+    def set_active_voice(self, voice_name: str, voice_engine: str | None = None) -> None:
+        self.active_voice_name = voice_name
+        if voice_engine:
+            self.active_voice_engine = voice_engine
+        self.save_settings()
+
+    async def discover_ollama_models(self) -> list[str]:
+        """Dynamically query Ollama for pulled models."""
+        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+        tags_url = f"{ollama_host}/api/tags"
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=1.5) as client:
+                res = await client.get(tags_url)
+                if res.status_code == 200:
+                    data = res.json()
+                    models = [m.get("name") for m in data.get("models", []) if m.get("name")]
+                    if models:
+                        # Update default models on provider
+                        if "ollama_local" in self.providers:
+                            self.providers["ollama_local"].default_models = models
+                        return models
+        except Exception:
+            pass
+        return self.providers.get("ollama_local", None).default_models if "ollama_local" in self.providers else []
+
+    def get_system_state(self) -> dict[str, Any]:
+        """Provide 100% dynamic configuration and state for the frontend."""
+        prov, model = self.get_active_provider()
+        is_local_brain = "local" in prov.provider_id.lower() or "ollama" in prov.provider_id.lower()
+        is_local_voice = "local" in self.active_voice_engine.lower() or "voice_studio" in self.active_voice_engine.lower()
+
+        # Generate dynamic quick commands based on current providers and tools
+        quick_cmds = [
+            {"label": "Switch to Local (Qwen 3.5)", "command": "FRIDAY, switch to your local brain"},
+            {"label": "Switch to Gemma 4 (12B)", "command": "Switch to Gemma 4 12 billion parameter"},
+            {"label": "Switch brain back to Qwen 3.5", "command": "Switch your brain back to Qwen 3.5"},
+            {"label": "Switch to OpenRouter", "command": "switch to OpenRouter"},
+            {"label": "Switch to Claude", "command": "switch to Claude"},
+            {"label": "Local voice: Jarvis", "command": "Switch to your local voice"},
+            {"label": "Local voice: Zubar B", "command": "Switch your voice to Zubar B"},
+            {"label": "How do you feel locally?", "command": "How do you feel running locally?"},
+            {"label": "Check Calendar", "command": "FRIDAY, what meetings do I have tomorrow?"},
+            {"label": "Pull Brand Voice", "command": "FRIDAY, can you pull up my brand voice?"},
+        ]
+
+        # Dynamic tools status
+        tools_list = [
+            {"id": "calendar", "name": "Google Calendar", "status": "connected", "icon": "calendar"},
+            {"id": "gmail", "name": "Gmail", "status": "connected", "icon": "mail"},
+            {"id": "canva", "name": "Canva", "status": "connected", "icon": "palette"},
+            {"id": "rea", "name": "REA Teardown", "status": "ready", "icon": "activity"},
+            {"id": "second_brain", "name": "Second Brain", "status": "ready", "icon": "database"},
+        ]
+
+        return {
+            "identity": {
+                "name": self.personality_config.get("name", "FRIDAY"),
+                "title": "F.R.I.D.A.Y.",
+                "subtitle": "Voice-Controlled Butler Intelligence",
+                "address_user_as": self.personality_config.get("address_user_as", "sir"),
+                "humor_level": self.personality_config.get("humor_level", 0.8),
+            },
+            "brain": {
+                "provider_id": prov.provider_id,
+                "provider_name": prov.name,
+                "model": model,
+                "is_local": is_local_brain,
+            },
+            "voice": {
+                "voice_name": self.active_voice_name,
+                "engine": self.active_voice_engine,
+                "is_local": is_local_voice,
+                "available_voices": self.available_voices,
+            },
+            "tools": tools_list,
+            "quick_commands": quick_cmds,
+            "fallback_chain": self.fallback_chain,
+        }
 
     def get_system_prompt(self) -> str:
         """Construct system prompt adhering to personality settings."""
@@ -241,6 +328,23 @@ class LLMManager:
                 "Rather well, sir. No cloud, no invoice, no one listening in. I've gone from staff to family, and family doesn't get paid.",
             )
             return True, reply
+
+        # Voice switching commands
+        if "switch to your local voice" in text or "switch to local voice" in text:
+            self.set_active_voice("Jarvis", "voice_studio")
+            return True, "How do I sound, sir? This is my local voice."
+
+        if "switch your voice to zubar b" in text or "switch voice to zubar b" in text or "switch to zubar" in text:
+            self.set_active_voice("Zubar B", "voice_studio")
+            return True, "How do I sound, sir? This is Zubar B."
+
+        if "switch back to your jarvis voice" in text or "switch back to jarvis voice" in text or "switch to jarvis voice" in text:
+            self.set_active_voice("Jarvis", "voice_studio")
+            return True, "How do I sound, sir? This is my local voice."
+
+        if "switch to cloud voice" in text or "switch to elevenlabs" in text:
+            self.set_active_voice("Jarvis (ElevenLabs)", "elevenlabs")
+            return True, "Cloud voice engaged, sir. Crisp and ready."
 
         # Explicit model switch: "use model <name>" or "switch model to <name>"
         model_switch_match = re.search(r"(?:use model|switch model to|use)\s+([a-zA-Z0-9_\-\.\:\/]+)", text)

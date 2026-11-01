@@ -1,18 +1,19 @@
 /**
- * FRIDAY Web Client - Voice & Brain Core
+ * FRIDAY Web Client - 100% Dynamically Rendered AI Assistant Interface
  */
 
 class FridayClient {
   constructor() {
     this.sessionHistory = [];
-    this.activeProvider = "ollama_local";
-    this.activeProviderName = "Ollama (Local)";
-    this.activeModel = "qwen3.5:9b";
-    this.activeVoice = "Jarvis (Local)";
+    this.systemState = null;
     this.socket = null;
     this.isStreaming = false;
+    this.currentStreamContentDiv = null;
+    this.currentAccumulatedText = "";
 
     // DOM Elements
+    this.systemTitle = document.getElementById("system-title");
+    this.systemSubtitle = document.getElementById("system-subtitle");
     this.brainBadge = document.getElementById("active-brain-text");
     this.voiceBadge = document.getElementById("active-voice-text");
     this.liveStatus = document.getElementById("live-status-text");
@@ -20,18 +21,29 @@ class FridayClient {
     this.tokensMetric = document.getElementById("metric-tokens");
     this.costMetric = document.getElementById("metric-cost");
     this.messagesStream = document.getElementById("messages-stream");
+    this.quickCommandsContainer = document.getElementById("quick-commands-container");
+    this.toolsChipsList = document.getElementById("tools-chips-list");
     this.chatForm = document.getElementById("chat-form");
     this.userInput = document.getElementById("user-input");
     this.settingsModal = document.getElementById("settings-modal");
     this.providersList = document.getElementById("providers-list");
+    this.voicePickerSelect = document.getElementById("voice-picker-select");
+    this.applyVoiceBtn = document.getElementById("apply-voice-btn");
+    this.readingPanel = document.getElementById("reading-panel");
+    this.panelTitle = document.getElementById("panel-title");
+    this.panelContent = document.getElementById("panel-content");
+    this.readAloudBtn = document.getElementById("read-aloud-btn");
+    this.closeReadingPanelBtn = document.getElementById("close-reading-panel-btn");
 
     this.init();
   }
 
   async init() {
     this.bindEvents();
-    this.connectWebSocket();
+    // 1. Fetch fresh session to reset state on load/refresh
     await this.fetchFreshSession();
+    // 2. Connect WebSocket for real-time telemetry
+    this.connectWebSocket();
   }
 
   bindEvents() {
@@ -39,17 +51,6 @@ class FridayClient {
     this.chatForm.addEventListener("submit", (e) => {
       e.preventDefault();
       this.handleUserSubmit();
-    });
-
-    // Quick command chips
-    document.querySelectorAll(".cmd-chip").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const cmd = btn.getAttribute("data-cmd");
-        if (cmd) {
-          this.userInput.value = cmd;
-          this.handleUserSubmit();
-        }
-      });
     });
 
     // Settings modal open/close
@@ -65,6 +66,23 @@ class FridayClient {
     this.settingsModal.addEventListener("click", (e) => {
       if (e.target === this.settingsModal) this.closeSettingsModal();
     });
+
+    // Apply voice button
+    this.applyVoiceBtn.addEventListener("click", () => {
+      const selectedVoice = this.voicePickerSelect.value;
+      if (selectedVoice) {
+        this.switchVoice(selectedVoice);
+      }
+    });
+
+    // Reading panel controls
+    this.closeReadingPanelBtn.addEventListener("click", () => {
+      this.closeReadingPanel();
+    });
+    this.readAloudBtn.addEventListener("click", () => {
+      this.userInput.value = "read it out loud";
+      this.handleUserSubmit();
+    });
   }
 
   connectWebSocket() {
@@ -75,7 +93,7 @@ class FridayClient {
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
-        this.updateStatus("Neural link established. Standing by, sir.");
+        this.updateStatus("Neural telemetry link active. Standing by, sir.");
       };
 
       this.socket.onmessage = (event) => {
@@ -101,19 +119,117 @@ class FridayClient {
       const res = await fetch("/api/session/fresh");
       if (res.ok) {
         const data = await res.json();
-        this.activeProvider = data.active_provider;
-        this.activeModel = data.active_model;
-        this.updateHUD();
+        this.applyDynamicState(data.state);
+        // Clear messages and inject initial greeting dynamically
+        this.messagesStream.innerHTML = "";
+        this.appendMessage("assistant", data.greeting);
+        this.sessionHistory = [{ role: "assistant", content: data.greeting }];
         this.updateStatus("System initialized. Standing by, sir.");
       }
     } catch (e) {
-      console.error("Failed to load session:", e);
+      console.error("Failed to fetch fresh session:", e);
     }
   }
 
-  updateHUD() {
-    this.brainBadge.textContent = `${this.activeProviderName || this.activeProvider} / ${this.activeModel}`;
-    this.voiceBadge.textContent = this.activeVoice;
+  applyDynamicState(state) {
+    if (!state) return;
+    this.systemState = state;
+
+    // 1. Identity & Titles
+    if (state.identity) {
+      this.systemTitle.textContent = state.identity.title || "F.R.I.D.A.Y.";
+      this.systemSubtitle.textContent = state.identity.subtitle || "Butler Intelligence";
+    }
+
+    // 2. Brain Badge
+    if (state.brain) {
+      this.brainBadge.textContent = `${state.brain.provider_name} / ${state.brain.model}`;
+      const brainDot = document.getElementById("brain-dot");
+      if (brainDot) {
+        brainDot.className = state.brain.is_local ? "badge-dot pulse-cyan" : "badge-dot pulse-amber";
+      }
+    }
+
+    // 3. Voice Badge
+    if (state.voice) {
+      this.voiceBadge.textContent = state.voice.voice_name;
+      // Populate voice picker select if empty
+      this.renderVoicePicker(state.voice.available_voices, state.voice.voice_name);
+    }
+
+    // 4. Dynamic Quick Commands Chips
+    if (state.quick_commands) {
+      this.renderQuickCommands(state.quick_commands);
+    }
+
+    // 5. Dynamic Tools Bar
+    if (state.tools) {
+      this.renderToolsBar(state.tools);
+    }
+  }
+
+  renderVoicePicker(availableVoices, activeVoice) {
+    if (!this.voicePickerSelect || !availableVoices) return;
+    this.voicePickerSelect.innerHTML = "";
+    availableVoices.forEach((voice) => {
+      const opt = document.createElement("option");
+      opt.value = voice;
+      opt.textContent = voice;
+      if (voice === activeVoice) opt.selected = true;
+      this.voicePickerSelect.appendChild(opt);
+    });
+  }
+
+  renderQuickCommands(commands) {
+    this.quickCommandsContainer.innerHTML = "";
+    const label = document.createElement("span");
+    label.className = "quick-label";
+    label.textContent = "Dynamic Commands:";
+    this.quickCommandsContainer.appendChild(label);
+
+    commands.forEach((item) => {
+      const btn = document.createElement("button");
+      btn.className = "cmd-chip";
+      btn.textContent = item.label;
+      btn.setAttribute("data-cmd", item.command);
+      btn.addEventListener("click", () => {
+        this.userInput.value = item.command;
+        this.handleUserSubmit();
+      });
+      this.quickCommandsContainer.appendChild(btn);
+    });
+  }
+
+  renderToolsBar(tools) {
+    this.toolsChipsList.innerHTML = "";
+    tools.forEach((tool) => {
+      const chip = document.createElement("div");
+      chip.className = "tool-chip";
+      chip.title = `Tool: ${tool.name} (${tool.status})`;
+
+      chip.innerHTML = `
+        <span class="tool-status-dot"></span>
+        <span class="tool-name">${tool.name}</span>
+        <span class="tool-status-text">[${tool.status}]</span>
+      `;
+
+      chip.addEventListener("click", () => {
+        if (tool.id === "calendar") {
+          this.userInput.value = "FRIDAY, what meetings do I have tomorrow?";
+          this.handleUserSubmit();
+        } else if (tool.id === "rea") {
+          this.userInput.value = "FRIDAY, can you reverse engineer igloo.inc for me?";
+          this.handleUserSubmit();
+        } else if (tool.id === "second_brain") {
+          this.userInput.value = "FRIDAY, can you pull up my brand voice?";
+          this.handleUserSubmit();
+        } else {
+          this.updateStatus(`Tool selected: ${tool.name}. Reaching for tools...`);
+        }
+      });
+
+      this.toolsChipsList.appendChild(chip);
+    });
   }
 
   updateStatus(text) {
@@ -126,7 +242,7 @@ class FridayClient {
     if (cost !== undefined) this.costMetric.textContent = `Cost: $${cost.toFixed(4)}`;
   }
 
-  appendMessage(role, content, meta = null) {
+  appendMessage(role, content) {
     const wrapper = document.createElement("div");
     wrapper.className = `message-wrapper ${role}`;
 
@@ -139,7 +255,8 @@ class FridayClient {
 
     const header = document.createElement("div");
     header.className = "message-header";
-    header.innerHTML = `<span>${role === "assistant" ? "FRIDAY" : "Sir"}</span> <span class="time-stamp">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>`;
+    const speaker = role === "assistant" ? (this.systemState?.identity?.name || "FRIDAY") : "Sir";
+    header.innerHTML = `<span>${speaker}</span> <span class="time-stamp">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>`;
 
     const contentDiv = document.createElement("div");
     contentDiv.className = "message-content";
@@ -156,6 +273,16 @@ class FridayClient {
     return contentDiv;
   }
 
+  openReadingPanel(title, content) {
+    this.panelTitle.textContent = title;
+    this.panelContent.textContent = content;
+    this.readingPanel.classList.remove("hidden");
+  }
+
+  closeReadingPanel() {
+    this.readingPanel.classList.add("hidden");
+  }
+
   async handleUserSubmit() {
     const text = this.userInput.value.trim();
     if (!text || this.isStreaming) return;
@@ -164,9 +291,17 @@ class FridayClient {
     this.appendMessage("user", text);
     this.sessionHistory.push({ role: "user", content: text });
 
-    this.updateStatus("Reaching for cognitive core...");
+    // Dynamic status text for tools or general queries
+    if (text.toLowerCase().includes("calendar") || text.toLowerCase().includes("meetings")) {
+      this.updateStatus("Let me see if I have the tools for that, sir.");
+      setTimeout(() => this.updateStatus("Reaching for tools..."), 600);
+    } else if (text.toLowerCase().includes("reverse engineer") || text.toLowerCase().includes("teardown")) {
+      this.updateStatus("Opening site in clean browser while REA takes it apart...");
+    } else {
+      this.updateStatus("Cognitive core engaged...");
+    }
 
-    // If WebSocket is active, send via WebSocket
+    // Transmit via WebSocket if connected
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.isStreaming = true;
       this.socket.send(JSON.stringify({
@@ -175,7 +310,6 @@ class FridayClient {
         session_history: this.sessionHistory.slice(-10),
       }));
     } else {
-      // Fallback to HTTP POST /api/chat
       await this.sendChatHttp(text);
     }
   }
@@ -201,14 +335,18 @@ class FridayClient {
       this.appendMessage("assistant", data.reply);
       this.sessionHistory.push({ role: "assistant", content: data.reply });
 
-      this.activeProviderName = data.provider;
-      this.activeModel = data.model;
-      this.updateHUD();
+      // Refresh dynamic state
+      const stateRes = await fetch("/api/system/state");
+      if (stateRes.ok) {
+        const freshState = await stateRes.json();
+        this.applyDynamicState(freshState);
+      }
+
       this.updateMetrics(data.latency_ms, data.prompt_tokens + data.completion_tokens, data.estimated_cost_usd);
       this.updateStatus("Standing by, sir.");
     } catch (e) {
       this.appendMessage("assistant", `I apologize, sir. Error: ${e.message}`);
-      this.updateStatus("Cognitive error encountered.");
+      this.updateStatus("Cognitive exception encountered.");
     } finally {
       this.isStreaming = false;
     }
@@ -217,21 +355,17 @@ class FridayClient {
   handleSocketMessage(data) {
     switch (data.type) {
       case "init":
-        this.activeProvider = data.active_provider;
-        this.activeProviderName = data.active_provider_name;
-        this.activeModel = data.active_model;
-        this.updateHUD();
+        this.applyDynamicState(data.state);
         break;
 
-      case "brain_switch":
-        this.activeProvider = data.active_provider;
-        this.activeProviderName = data.active_provider_name;
-        this.activeModel = data.active_model;
-        this.updateHUD();
-        this.appendMessage("assistant", data.reply);
-        this.sessionHistory.push({ role: "assistant", content: data.reply });
-        this.updateStatus(`Brain switched to ${this.activeProviderName} (${this.activeModel})`);
+      case "state_update":
+        this.applyDynamicState(data.state);
+        if (data.reply) {
+          this.appendMessage("assistant", data.reply);
+          this.sessionHistory.push({ role: "assistant", content: data.reply });
+        }
         this.isStreaming = false;
+        this.updateStatus("Standing by, sir.");
         break;
 
       case "stream_start":
@@ -254,6 +388,10 @@ class FridayClient {
       case "stream_end":
         if (this.currentAccumulatedText) {
           this.sessionHistory.push({ role: "assistant", content: this.currentAccumulatedText });
+          // If long output (e.g. teardown report), open reading panel
+          if (this.currentAccumulatedText.length > 500) {
+            this.openReadingPanel("Full Report Dossier", this.currentAccumulatedText);
+          }
         }
         this.isStreaming = false;
         this.updateStatus("Standing by, sir.");
@@ -261,6 +399,43 @@ class FridayClient {
 
       default:
         break;
+    }
+  }
+
+  async switchVoice(voiceName) {
+    try {
+      const res = await fetch("/api/voice/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voice_name: voiceName }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        this.applyDynamicState(data.state);
+        this.updateStatus(`Voice profile updated to ${voiceName}`);
+      }
+    } catch (e) {
+      console.error("Failed to switch voice:", e);
+    }
+  }
+
+  async switchProvider(providerId, model) {
+    try {
+      const res = await fetch("/api/providers/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider_id: providerId, model: model }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        this.applyDynamicState(data.state);
+        this.loadProvidersSettings();
+        this.updateStatus(`Brain switched to ${data.active_provider_name} (${data.active_model})`);
+      } else {
+        alert(data.detail || "Switch failed");
+      }
+    } catch (e) {
+      alert(`Switch error: ${e.message}`);
     }
   }
 
@@ -347,7 +522,7 @@ class FridayClient {
       head.appendChild(actions);
       card.appendChild(head);
 
-      // Key input row (only for commercial providers)
+      // Key input row (for commercial providers)
       if (p.id !== "ollama_local") {
         const keyRow = document.createElement("div");
         keyRow.className = "key-input-row";
@@ -380,29 +555,6 @@ class FridayClient {
 
       this.providersList.appendChild(card);
     });
-  }
-
-  async switchProvider(providerId, model) {
-    try {
-      const res = await fetch("/api/providers/switch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider_id: providerId, model: model }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        this.activeProvider = data.active_provider;
-        this.activeProviderName = data.active_provider_name;
-        this.activeModel = data.active_model;
-        this.updateHUD();
-        this.loadProvidersSettings();
-        this.updateStatus(`Brain switched to ${this.activeProviderName} (${this.activeModel})`);
-      } else {
-        alert(data.detail || "Switch failed");
-      }
-    } catch (e) {
-      alert(`Switch error: ${e.message}`);
-    }
   }
 }
 
