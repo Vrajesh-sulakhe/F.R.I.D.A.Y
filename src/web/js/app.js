@@ -1688,7 +1688,6 @@ class FridayClient {
 
     this.providersList.appendChild(card);
   }
-  }
 
   async switchProvider(providerId, model) {
     try {
