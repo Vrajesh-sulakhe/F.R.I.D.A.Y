@@ -288,6 +288,7 @@ async def list_providers():
     """List all configured LLM providers, dynamically discovering local and cloud models."""
     await llm_manager.discover_ollama_models()
     await llm_manager.discover_openrouter_models()
+    await llm_manager.discover_nvidia_nim_models()
     return llm_manager.get_providers_status()
 
 
@@ -316,7 +317,9 @@ async def update_provider_key(payload: ProviderKeyUpdateRequest):
         llm_manager.update_provider_api_key(payload.provider_id, payload.api_key)
         if payload.provider_id == "openrouter":
             await llm_manager.discover_openrouter_models(force=True)
-        return {"status": "success", "message": f"API key for {payload.provider_id} updated successfully."}
+        elif payload.provider_id == "nvidia_nim":
+            await llm_manager.discover_nvidia_nim_models(force=True)
+        return {"status": "success", "message": f"API key for {payload.provider_id} updated successfully and model catalog synced."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

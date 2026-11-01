@@ -217,6 +217,105 @@ class LLMManager:
 
         return getattr(prov, "models_details", [])
 
+    async def discover_nvidia_nim_models(self, force: bool = False) -> list[dict[str, Any]]:
+        """Dynamically query NVIDIA NIM (build.nvidia.com) for models available via the API key."""
+        prov = self.providers.get("nvidia_nim")
+        if not prov:
+            return []
+
+        # Return cached if recent and not forced
+        if not force and hasattr(prov, "models_details") and getattr(prov, "models_details", None):
+            return prov.models_details
+
+        api_key = prov.api_key or os.getenv("NVIDIA_API_KEY")
+        if not api_key:
+            return getattr(prov, "models_details", [])
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+            "User-Agent": "FRIDAY-Assistant/1.0",
+        }
+
+        models_url = f"{prov.base_url.rstrip('/')}/models"
+
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                res = await client.get(models_url, headers=headers)
+                if res.status_code == 200:
+                    payload = res.json()
+                    raw_models = payload.get("data", [])
+                    free_models = []
+                    other_models = []
+
+                    # Known friendly display names for flagship NVIDIA NIM models
+                    curated_names = {
+                        "nvidia/nemotron-3.5-bolt-e4b": "NVIDIA: Nemotron 3.5 Bolt E4B (Agentic Chat & Reasoning)",
+                        "nvidia/nemotron-3.5-lightning-30b-a3b": "NVIDIA: Nemotron 3.5 Lightning (Fast Reasoning)",
+                        "nvidia/nemotron-parse": "NVIDIA: Nemotron 3.5 Parse (Document & Table Extraction)",
+                        "nvidia/nemotron-parse-2.0": "NVIDIA: Nemotron Parse 2.0 (High Precision OCR)",
+                        "nvidia/nemotron-3.5-embed-1b": "NVIDIA: Nemotron 3.5 Embed 1B (RAG Embedding)",
+                        "nvidia/nemotron-3.5-embed-8b": "NVIDIA: Nemotron 3.5 Embed 8B (Multimodal Embedding)",
+                        "mistralai/mistral-large-4-1t-a52b": "Mistral AI: Mistral Large 4 (1T-total / 52B MoE)",
+                        "mistralai/mistral-large-2-instruct": "Mistral AI: Mistral Large 2 (Instruct)",
+                        "mistralai/codestral-22b-instruct-v0.1": "Mistral AI: Codestral 22B (Code Synthesis)",
+                        "minimaxai/minimax-m3.1-flash": "MiniMax: MiniMax M3.1 Flash (Multimodal Mixture-of-Experts)",
+                        "deepseek-ai/deepseek-v4.1-flash": "DeepSeek: DeepSeek V4.1 Flash (High Throughput)",
+                        "deepseek-ai/deepseek-r1": "DeepSeek: DeepSeek R1 (Frontier Reasoning)",
+                        "deepseek-ai/deepseek-coder-6.7b-instruct": "DeepSeek: DeepSeek Coder 6.7B",
+                        "google/gemma-4-31b-it": "Google: Gemma 4 31B (Instruct)",
+                        "google/gemma-3-12b-it": "Google: Gemma 3 12B (Instruct)",
+                        "meta/llama-3.2-11b-vision-instruct": "Meta: LLaMA 3.2 11B (Vision Instruct)",
+                        "meta/llama-3.2-90b-vision-instruct": "Meta: LLaMA 3.2 90B (Vision Multimodal)",
+                        "microsoft/phi-3.5-moe-instruct": "Microsoft: Phi-3.5 MoE (Reasoning)",
+                    }
+
+                    for m in raw_models:
+                        mid = m.get("id", "")
+                        if not mid:
+                            continue
+
+                        # Check curated names first
+                        if mid in curated_names:
+                            disp_name = curated_names[mid]
+                        else:
+                            parts = mid.split("/", 1)
+                            org = parts[0].replace("-", " ").title() if len(parts) > 1 else ""
+                            mname = parts[1] if len(parts) > 1 else mid
+                            disp_name = f"{org}: {mname}" if org else mname
+
+                        # All build.nvidia.com models accessible via the developer integrate endpoint are Free Endpoints
+                        item = {
+                            "id": mid,
+                            "name": disp_name,
+                            "is_free": True,
+                            "owned_by": m.get("owned_by", ""),
+                            "endpoint_type": "Free Endpoint",
+                        }
+
+                        # Prioritize popular/flagship models
+                        lmid = mid.lower()
+                        if any(k in lmid for k in ["nemotron", "mistral", "deepseek", "gemma", "llama", "minimax", "phi", "codestral"]):
+                            free_models.append(item)
+                        else:
+                            other_models.append(item)
+
+                    free_models.sort(key=lambda x: x["name"].lower())
+                    other_models.sort(key=lambda x: x["name"].lower())
+
+                    all_models_details = free_models + other_models
+                    prov.models_details = all_models_details
+                    prov.default_models = [m["id"] for m in all_models_details]
+                    logger.info(f"Dynamically discovered {len(all_models_details)} NVIDIA NIM models from key.")
+                    return all_models_details
+                else:
+                    logger.warning(f"NVIDIA NIM /models returned status {res.status_code}")
+        except Exception as e:
+            logger.warning(f"Failed to dynamically query NVIDIA NIM models: {e}")
+
+        return getattr(prov, "models_details", [])
+
     def get_system_state(self) -> dict[str, Any]:
         """Provide 100% dynamic configuration and state for the frontend."""
         prov, model = self.get_active_provider()

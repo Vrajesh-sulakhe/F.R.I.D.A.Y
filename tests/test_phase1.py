@@ -153,6 +153,19 @@ async def test_openrouter_dynamic_discovery():
     assert openrouter_info["free_models_count"] >= 1
 
 
+@pytest.mark.anyio
+async def test_nvidia_nim_dynamic_discovery():
+    models = await llm_manager.discover_nvidia_nim_models()
+    assert len(models) >= 50
+    free_models = [m for m in models if m.get("is_free")]
+    assert len(free_models) >= 50
+    status = llm_manager.get_providers_status()
+    nim_info = next(p for p in status["providers"] if p["id"] == "nvidia_nim")
+    assert nim_info["total_models_count"] >= 50
+    assert nim_info["free_models_count"] >= 50
+    assert any("nemotron" in m["id"].lower() for m in nim_info["models_details"])
+
+
 def test_mac_app_launcher():
     from src.tools.mac_apps import MacAppLauncher
     apps = MacAppLauncher.get_installed_apps()
