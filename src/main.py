@@ -127,7 +127,55 @@ class OpenAppRequest(BaseModel):
     app_name: str
 
 
+class TTSRequest(BaseModel):
+    text: str
+    voice: str | None = None
+
+
+@app.on_event("startup")
+async def preload_stt_model():
+    """Warm up Whisper in the background so the first utterance isn't slow."""
+    import asyncio
+    from src.voice.engine import warmup_stt
+    asyncio.get_event_loop().run_in_executor(None, warmup_stt)
+
+
+@app.post("/api/stt")
+async def speech_to_text(request: Request):
+    """Transcribe an uploaded WAV utterance locally with Whisper."""
+    import asyncio
+    from src.voice.engine import transcribe_wav
+    audio = await request.body()
+    if len(audio) < 2000:
+        return {"text": ""}
+    try:
+        text = await asyncio.get_event_loop().run_in_executor(None, transcribe_wav, audio)
+        return {"text": text}
+    except Exception as e:
+        logger.error(f"STT failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
+
+
+@app.post("/api/tts")
+async def text_to_speech(payload: TTSRequest):
+    """Render FRIDAY's reply as a British butler voice WAV."""
+    import asyncio
+    from fastapi.responses import Response
+    from src.voice.engine import synthesize_wav, TTS_VOICE
+    try:
+        wav = await asyncio.get_event_loop().run_in_executor(
+            None, synthesize_wav, payload.text, payload.voice or TTS_VOICE
+        )
+    except Exception as e:
+        logger.error(f"TTS failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Speech synthesis failed: {e}")
+    if not wav:
+        raise HTTPException(status_code=204, detail="Nothing to say")
+    return Response(content=wav, media_type="audio/wav")
+
+
 class PathActionRequest(BaseModel):
+
     path: str
 
 

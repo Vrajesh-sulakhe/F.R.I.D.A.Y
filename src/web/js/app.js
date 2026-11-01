@@ -343,97 +343,211 @@ class FridayClient {
   }
 
 
+  // ---------------------------------------------------------------------------
+  // Voice input: always-on microphone with voice-activity detection (VAD).
+  // Audio is captured in the browser, cut into utterances on silence, and sent
+  // to the local Whisper endpoint (/api/stt). Works in Brave/Chrome/Safari.
+  // ---------------------------------------------------------------------------
   initSpeechRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn("Speech Recognition API not supported in this browser.");
+    this.audioCtx = null;
+    this.micStream = null;
+    this.micProcessor = null;
+    this.isSpeakingAudio = false;
+    this.speakToken = 0;
+    this.currentAudio = null;
+    this.vad = {
+      threshold: 0.018,      // RMS level that counts as speech
+      silenceMs: 900,        // silence that ends an utterance
+      minSpeechMs: 350,      // ignore clicks/pops shorter than this
+      maxUtteranceMs: 20000, // hard cap per utterance
+      preRollChunks: 4,      // keep a little audio before speech starts
+    };
+    this.resetVadState();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       if (this.micStatusText) this.micStatusText.textContent = "NO MIC API";
-      return;
     }
+  }
 
-    try {
-      this.recognition = new SpeechRecognition();
-      this.recognition.continuous = true;
-      this.recognition.interimResults = true;
-      this.recognition.lang = "en-US";
-
-      this.recognition.onstart = () => {
-        this.isListening = true;
-        this.updateListeningUI(true);
-      };
-
-      this.recognition.onresult = (event) => {
-        let interimTranscript = "";
-        let finalTranscript = "";
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
-        }
-
-        const currentText = (finalTranscript || interimTranscript).trim();
-        if (currentText) {
-          this.userInput.value = currentText;
-          this.reactorSubstatus.textContent = `heard: "${currentText.slice(-20)}"`;
-        }
-
-        if (finalTranscript) {
-          this.handleUserSubmit();
-        }
-      };
-
-      this.recognition.onerror = (e) => {
-        console.warn("Speech recognition error:", e.error);
-        if (e.error !== "no-speech") {
-          this.stopListening();
-        }
-      };
-
-      this.recognition.onend = () => {
-        if (this.isListening) {
-          // Restart if still marked as listening
-          try { this.recognition.start(); } catch (err) {}
-        } else {
-          this.updateListeningUI(false);
-        }
-      };
-    } catch (e) {
-      console.warn("Failed to initialize speech recognition:", e);
-    }
+  resetVadState() {
+    this.speechChunks = [];
+    this.preRoll = [];
+    this.inSpeech = false;
+    this.speechStart = 0;
+    this.lastVoiceAt = 0;
   }
 
   toggleListening() {
-    if (!this.recognition) {
-      alert("Microphone recognition requires Chrome, Brave, or Safari with microphone permissions granted.");
-      return;
-    }
-    if (this.isListening) {
-      this.stopListening();
-    } else {
-      this.startListening();
-    }
+    if (this.isListening) this.stopListening();
+    else this.startListening();
   }
 
-  startListening() {
-    if (!this.recognition) return;
-    this.isListening = true;
-    try {
-      this.recognition.start();
-    } catch (e) {
-      // already started
+  async startListening() {
+    if (this.isListening) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.setMicError("Microphone API unavailable. Open http://localhost:4719 in Brave, Chrome or Safari.");
+      return;
     }
+    try {
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+      });
+    } catch (e) {
+      console.warn("Microphone permission error:", e);
+      const denied = e && (e.name === "NotAllowedError" || e.name === "SecurityError");
+      this.setMicError(denied
+        ? "Microphone blocked. Click the lock icon in the address bar, allow Microphone, then press the mic again."
+        : `Microphone unavailable: ${e.message || e.name}`);
+      return;
+    }
+
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    this.audioCtx = new Ctx();
+    if (this.audioCtx.state === "suspended") await this.audioCtx.resume();
+
+    const source = this.audioCtx.createMediaStreamSource(this.micStream);
+    this.micProcessor = this.audioCtx.createScriptProcessor(4096, 1, 1);
+    this.micProcessor.onaudioprocess = (ev) => this.onAudioChunk(ev.inputBuffer.getChannelData(0));
+    // Route through a muted gain node so the processor runs without echoing the mic.
+    const mute = this.audioCtx.createGain();
+    mute.gain.value = 0;
+    source.connect(this.micProcessor);
+    this.micProcessor.connect(mute);
+    mute.connect(this.audioCtx.destination);
+
+    this.resetVadState();
+    this.isListening = true;
     this.updateListeningUI(true);
   }
 
   stopListening() {
     this.isListening = false;
-    if (this.recognition) {
-      try { this.recognition.stop(); } catch (e) {}
-    }
+    try { this.micProcessor && this.micProcessor.disconnect(); } catch (e) {}
+    try { this.micStream && this.micStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    try { this.audioCtx && this.audioCtx.close(); } catch (e) {}
+    this.micProcessor = null;
+    this.micStream = null;
+    this.audioCtx = null;
+    this.resetVadState();
     this.updateListeningUI(false);
+  }
+
+  setMicError(message) {
+    this.isListening = false;
+    this.updateListeningUI(false);
+    if (this.micStatusText) this.micStatusText.textContent = "MIC BLOCKED";
+    if (this.reactorSubstatus) this.reactorSubstatus.textContent = message.slice(0, 60);
+    this.appendMessage("assistant", message);
+  }
+
+  // True while FRIDAY is talking or thinking, so we never transcribe ourselves.
+  isMicGated() {
+    return this.isSpeakingAudio || this.isStreaming;
+  }
+
+  onAudioChunk(input) {
+    if (!this.isListening) return;
+    const chunk = new Float32Array(input); // copy; the buffer is reused by the browser
+    const now = performance.now();
+
+    if (this.isMicGated()) {
+      this.resetVadState();
+      return;
+    }
+
+    let sum = 0;
+    for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
+    const rms = Math.sqrt(sum / chunk.length);
+    const voiced = rms > this.vad.threshold;
+
+    if (!this.inSpeech) {
+      this.preRoll.push(chunk);
+      if (this.preRoll.length > this.vad.preRollChunks) this.preRoll.shift();
+      if (voiced) {
+        this.inSpeech = true;
+        this.speechStart = now;
+        this.lastVoiceAt = now;
+        this.speechChunks = [...this.preRoll];
+        this.preRoll = [];
+        if (this.reactorSubstatus) this.reactorSubstatus.textContent = "hearing you, sir...";
+      }
+      return;
+    }
+
+    this.speechChunks.push(chunk);
+    if (voiced) this.lastVoiceAt = now;
+
+    const silentFor = now - this.lastVoiceAt;
+    const length = now - this.speechStart;
+    if (silentFor > this.vad.silenceMs || length > this.vad.maxUtteranceMs) {
+      const spoke = this.lastVoiceAt - this.speechStart;
+      const chunks = this.speechChunks;
+      const rate = this.audioCtx ? this.audioCtx.sampleRate : 48000;
+      this.resetVadState();
+      if (spoke >= this.vad.minSpeechMs) this.transcribeUtterance(chunks, rate);
+    }
+  }
+
+  async transcribeUtterance(chunks, sampleRate) {
+    if (this.reactorSubstatus) this.reactorSubstatus.textContent = "transcribing...";
+    try {
+      const wav = this.encodeWav16k(chunks, sampleRate);
+      const res = await fetch("/api/stt", { method: "POST", body: wav });
+      if (!res.ok) throw new Error(`STT ${res.status}`);
+      const { text } = await res.json();
+      const heard = (text || "").trim();
+      if (heard) {
+        this.userInput.value = heard;
+        this.reactorSubstatus.textContent = `heard: "${heard.slice(0, 28)}"`;
+        await this.handleUserSubmit();
+      } else if (this.reactorSubstatus) {
+        this.reactorSubstatus.textContent = "listening...";
+      }
+    } catch (e) {
+      console.warn("Transcription error:", e);
+      if (this.reactorSubstatus) this.reactorSubstatus.textContent = "didn't catch that, sir";
+    }
+  }
+
+  // Float32 chunks at the device rate -> 16 kHz mono 16-bit PCM WAV.
+  encodeWav16k(chunks, sampleRate) {
+    let total = 0;
+    chunks.forEach(c => { total += c.length; });
+    const merged = new Float32Array(total);
+    let offset = 0;
+    chunks.forEach(c => { merged.set(c, offset); offset += c.length; });
+
+    const targetRate = 16000;
+    const ratio = sampleRate / targetRate;
+    const outLen = Math.floor(merged.length / ratio);
+    const pcm = new Int16Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      // average over the source window (cheap low-pass) to limit aliasing
+      const start = Math.floor(i * ratio);
+      const end = Math.min(merged.length, Math.floor((i + 1) * ratio));
+      let acc = 0;
+      for (let j = start; j < end; j++) acc += merged[j];
+      const s = Math.max(-1, Math.min(1, acc / Math.max(1, end - start)));
+      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+
+    const buffer = new ArrayBuffer(44 + pcm.length * 2);
+    const view = new DataView(buffer);
+    const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+    writeStr(0, "RIFF");
+    view.setUint32(4, 36 + pcm.length * 2, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, targetRate, true);
+    view.setUint32(28, targetRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, "data");
+    view.setUint32(40, pcm.length * 2, true);
+    new Int16Array(buffer, 44).set(pcm);
+    return new Blob([buffer], { type: "audio/wav" });
   }
 
   updateListeningUI(listening) {
@@ -450,30 +564,73 @@ class FridayClient {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Voice output: British butler voice rendered locally by the backend (/api/tts).
+  // Falls back to the browser's en-GB voice (Daniel) if the backend is unreachable.
+  // ---------------------------------------------------------------------------
   speakResponse(text) {
-    if (!this.synth) return;
-    try {
-      this.synth.cancel(); // Stop prior speech
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.05;
-      utterance.pitch = 0.95;
+    if (!text) return;
+    this.stopSpeaking();
+    const token = ++this.speakToken;
+    this.isSpeakingAudio = true; // gate the mic immediately, before audio arrives
+    if (this.reactorSubstatus) this.reactorSubstatus.textContent = "speaking, sir...";
 
-      // Prefer British / Jarvis style voice if available
-      const voices = this.synth.getVoices();
-      const ukVoice = voices.find(v => v.lang.includes("en-GB") || v.name.includes("Daniel") || v.name.includes("Oliver"));
-      if (ukVoice) utterance.voice = ukVoice;
+    fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+      .then(res => { if (!res.ok) throw new Error(`TTS ${res.status}`); return res.blob(); })
+      .then(blob => {
+        if (token !== this.speakToken) return; // superseded by newer speech
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        this.currentAudio = audio;
+        const done = () => {
+          URL.revokeObjectURL(url);
+          if (token === this.speakToken) this.finishSpeaking();
+        };
+        audio.onended = done;
+        audio.onerror = done;
+        return audio.play().catch(() => done());
+      })
+      .catch(err => {
+        console.warn("Server TTS failed, using browser voice:", err);
+        if (token === this.speakToken) this.speakWithBrowserVoice(text, token);
+      });
+  }
 
-      utterance.onstart = () => {
-        this.reactorSubstatus.textContent = "speaking, sir...";
-      };
-      utterance.onend = () => {
-        this.reactorSubstatus.textContent = this.isListening ? "listening..." : "standing by, sir.";
-      };
+  speakWithBrowserVoice(text, token) {
+    if (!this.synth) return this.finishSpeaking();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = this.synth.getVoices();
+    const voice = voices.find(v => v.name.includes("Daniel")) || voices.find(v => v.lang === "en-GB");
+    if (voice) utterance.voice = voice;
+    utterance.rate = 0.95;
+    utterance.pitch = 0.9;
+    utterance.onend = utterance.onerror = () => {
+      if (token === this.speakToken) this.finishSpeaking();
+    };
+    this.synth.speak(utterance);
+  }
 
-      this.synth.speak(utterance);
-    } catch (e) {
-      console.warn("Speech synthesis error:", e);
+  stopSpeaking() {
+    if (this.currentAudio) {
+      try { this.currentAudio.pause(); } catch (e) {}
+      this.currentAudio = null;
     }
+    if (this.synth) { try { this.synth.cancel(); } catch (e) {} }
+  }
+
+  finishSpeaking() {
+    this.currentAudio = null;
+    // Small tail so the room echo of the last word isn't picked up by the mic.
+    setTimeout(() => {
+      this.isSpeakingAudio = false;
+      if (this.reactorSubstatus) {
+        this.reactorSubstatus.textContent = this.isListening ? "listening..." : "standing by, sir.";
+      }
+    }, 350);
   }
 
   startReactorWaveAnimation() {
@@ -490,7 +647,7 @@ class FridayClient {
       const waveCount = 3;
 
       phase += 0.04;
-      const activeFactor = (this.isListening || this.synth.speaking) ? 1.8 : 0.4;
+      const activeFactor = (this.isListening || this.isSpeakingAudio) ? 1.8 : 0.4;
 
       for (let w = 0; w < waveCount; w++) {
         this.waveCtx.beginPath();
