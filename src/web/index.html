@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=5">
+  <link rel="stylesheet" href="/static/css/style.css?v=6">
 
   <!-- Three.js & OrbitControls for 3D Second Brain Galaxy Graph -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -181,113 +181,222 @@
       <!-- Injected dynamically on greeting & responses -->
     </div>
 
-    <div class="dock-row">
-      <!-- Input Pill -->
-      <form id="chat-form" class="dock-input-pill">
-        <input 
-          type="text" 
-          id="user-input" 
-          placeholder='Ask: "remind me..." · "good morning" · "open Canva" · "open Safari" · "teardown igloo.inc"'
-          autocomplete="off"
-        >
-        <button type="submit" class="dock-send-btn" title="Transmit command">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-        </button>
+    <!-- Unified Tactical Command Console -->
+    <div class="tactical-dock">
+      <!-- Input Command Form -->
+      <form id="chat-form" class="dock-command-form">
+        <div class="dock-prompt-gem" title="F.R.I.D.A.Y. Online">
+          <span class="gem-pulse"></span>
+        </div>
+        <div class="dock-input-wrap">
+          <input 
+            type="text" 
+            id="user-input" 
+            placeholder="Ask F.R.I.D.A.Y. anything · 'open Canva' · 'teardown igloo.inc' · 'status'..."
+            autocomplete="off"
+          >
+          <button type="submit" class="dock-send-btn" title="Transmit command (Enter)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
       </form>
 
-      <!-- Tools & Microphone Dock Pill -->
-      <div class="dock-tools-pill">
+      <!-- Precision Glass Divider -->
+      <div class="dock-divider"></div>
+
+      <!-- Tools & Capabilities Cluster -->
+      <div class="dock-tools-cluster">
         <!-- Microphone Voice Button -->
-        <button type="button" id="dock-mic-btn" class="dock-tool-btn mic-btn" title="Voice Input (Microphone)">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" id="dock-mic-btn" class="dock-tool-btn mic-btn" title="Voice Input (Continuous Listen)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
             <line x1="12" y1="19" x2="12" y2="23"></line>
             <line x1="8" y1="23" x2="16" y2="23"></line>
           </svg>
+          <span class="tool-label">Voice</span>
         </button>
 
-        <!-- REA Teardown -->
-        <button type="button" class="dock-tool-btn" id="tool-rea-btn" title="Reverse Engineer Website (REA)">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <!-- REA Teardown Engine -->
+        <button type="button" class="dock-tool-btn" id="tool-rea-btn" title="Reverse Engineer Engine (REA)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="16 18 22 12 16 6"></polyline>
             <polyline points="8 6 2 12 8 18"></polyline>
           </svg>
+          <span class="tool-label">REA</span>
         </button>
 
-        <!-- Mac App Launcher / Canva -->
-        <button type="button" class="dock-tool-btn" id="tool-canva-btn" title="Launch Canva or Mac Apps">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <!-- Mac App Launcher / Desktop Apps -->
+        <button type="button" class="dock-tool-btn" id="tool-canva-btn" title="Launch Mac Apps & Canva">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
             <line x1="8" y1="21" x2="16" y2="21"></line>
             <line x1="12" y1="17" x2="12" y2="21"></line>
           </svg>
+          <span class="tool-label">Apps</span>
         </button>
 
-        <!-- Google Calendar -->
-        <button type="button" class="dock-tool-btn" id="tool-calendar-btn" title="Google Calendar">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <!-- Google Calendar / Schedule -->
+        <button type="button" class="dock-tool-btn" id="tool-calendar-btn" title="Calendar & Schedules">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
             <line x1="16" y1="2" x2="16" y2="6"></line>
             <line x1="8" y1="2" x2="8" y2="6"></line>
             <line x1="3" y1="10" x2="21" y2="10"></line>
           </svg>
+          <span class="tool-label">Schedule</span>
         </button>
 
-        <!-- Gmail -->
-        <button type="button" class="dock-tool-btn" id="tool-gmail-btn" title="Gmail">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <!-- Gmail Dispatch -->
+        <button type="button" class="dock-tool-btn" id="tool-gmail-btn" title="Mail Dispatch">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
             <polyline points="22,6 12,13 2,6"></polyline>
           </svg>
+          <span class="tool-label">Mail</span>
         </button>
 
         <!-- Settings Modal Button -->
-        <button type="button" class="dock-tool-btn" id="open-settings-btn" title="Providers & Voice Settings">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" class="dock-tool-btn" id="open-settings-btn" title="System Configuration">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
           </svg>
+          <span class="tool-label">Config</span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Settings Modal (Brain Providers, OpenRouter Model Catalog, Voices) -->
+  <!-- Settings Modal (Brain Providers, Model Catalog, Voice Studio, Telemetry) -->
   <div id="settings-modal" class="modal-backdrop hidden">
     <div class="modal-card">
       <div class="modal-header">
-        <h2>System Configuration</h2>
-        <button type="button" id="close-settings-btn" class="modal-close">&times;</button>
+        <div class="modal-title-group">
+          <div class="modal-super-tag">STARK NEURAL CORE</div>
+          <h2>System Configuration</h2>
+          <p class="modal-subtext">Manage multi-provider LLM matrix, voice synthesis profiles, and local telemetry.</p>
+        </div>
+        <button type="button" id="close-settings-btn" class="modal-close" title="Close configuration">&times;</button>
       </div>
-      <div class="modal-body">
-        <div class="settings-section">
-          <h3>Active Voice Profile</h3>
-          <p class="section-desc">Select active voice output profile (Local Voice Studio or Cloud ElevenLabs).</p>
-          <div class="voice-picker-row">
+
+      <!-- Segmented Navigation Tabs -->
+      <div class="modal-tabs-bar">
+        <button type="button" class="modal-tab-btn active" data-tab="tab-brain">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 6.84 9.49l.52-1.93A8.006 8.006 0 0 1 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8c0 3.3-2 6.13-4.88 7.35l.77 1.85C19.34 19.8 22 16.2 22 12c0-5.52-4.48-10-10-10z"></path>
+          </svg>
+          <span>Brain Engines</span>
+        </button>
+
+        <button type="button" class="modal-tab-btn" data-tab="tab-voice">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+          <span>Voice & Audio</span>
+        </button>
+
+        <button type="button" class="modal-tab-btn" data-tab="tab-telemetry">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          <span>System Telemetry</span>
+        </button>
+      </div>
+
+      <!-- Tab Panes Container -->
+      <div class="modal-tab-panes">
+        <!-- TAB 1: BRAIN ENGINES -->
+        <div id="tab-brain" class="tab-pane active">
+          <!-- Segmented Provider Chips Selector -->
+          <div class="provider-switch-segment" id="providers-segmented-nav">
+            <!-- Dynamically populated provider tabs (OpenRouter, Ollama, NVIDIA, Anthropic) -->
+          </div>
+
+          <!-- Active Provider Workspace -->
+          <div id="active-provider-workspace" class="provider-workspace">
+            <div id="providers-list" class="providers-list"></div>
+          </div>
+        </div>
+
+        <!-- TAB 2: VOICE & AUDIO -->
+        <div id="tab-voice" class="tab-pane">
+          <div class="voice-tab-header">
+            <div>
+              <h3 class="section-title">Acoustic Identity & Voice Profiles</h3>
+              <p class="section-desc">Select active neural TTS or local speech synthesis persona for F.R.I.D.A.Y.</p>
+            </div>
+          </div>
+
+          <!-- Interactive Voice Cards Grid -->
+          <div id="voice-cards-grid" class="voice-cards-grid">
+            <!-- Populated dynamically via JS renderVoiceCards -->
+          </div>
+
+          <!-- Backward compatibility hidden container -->
+          <div class="voice-picker-row hidden-compat" style="display: none;">
             <select id="voice-picker-select" class="action-btn select-box"></select>
             <button type="button" id="apply-voice-btn" class="action-btn primary">Apply Voice</button>
           </div>
         </div>
 
-        <div class="settings-section">
-          <h3>Brain Providers & Endpoints</h3>
-          <p class="section-desc">Manage LLM engines, dynamic models catalog, and API keys.</p>
-          <div id="providers-list" class="providers-list"></div>
+        <!-- TAB 3: SYSTEM TELEMETRY -->
+        <div id="tab-telemetry" class="tab-pane">
+          <div class="telemetry-grid" id="telemetry-grid">
+            <div class="telemetry-card">
+              <span class="telemetry-label">ACTIVE BRAIN ENGINE</span>
+              <div class="telemetry-val" id="telemetry-brain-name">OpenRouter</div>
+              <div class="telemetry-sub" id="telemetry-brain-model">nvidia/nemotron-3.5-lightning</div>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">VOICE SYNTHESIS</span>
+              <div class="telemetry-val" id="telemetry-voice-name">Moira (Irish Female)</div>
+              <div class="telemetry-sub" id="telemetry-voice-engine">Local macOS Speech Synthesis (185 WPM)</div>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">GRAPH 3D NODES</span>
+              <div class="telemetry-val" id="telemetry-nodes-count">215 Indexed</div>
+              <div class="telemetry-sub">Applications, Projects, Notes, Code, Utilities</div>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">FALLBACK RESILIENCE</span>
+              <div class="telemetry-val" style="color: #10b981;">Armed & Ready</div>
+              <div class="telemetry-sub">Ollama Local &rarr; OpenRouter Cloud</div>
+            </div>
+          </div>
         </div>
+      </div>
 
+      <div class="modal-footer">
+        <div class="footer-status">
+          <span class="status-pulse-dot"></span>
+          <span>F.R.I.D.A.Y. Core Heuristics v2.6.4 Online</span>
+        </div>
         <div class="settings-actions">
-          <button type="button" id="refresh-providers-btn" class="action-btn secondary">Rescan Providers</button>
+          <button type="button" id="refresh-providers-btn" class="action-btn secondary">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>Rescan Providers</span>
+          </button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Scripts -->
-  <script src="/static/js/graph.js?v=5"></script>
-  <script src="/static/js/app.js?v=5"></script>
+  <script src="/static/js/graph.js?v=6"></script>
+  <script src="/static/js/app.js?v=6"></script>
 </body>
 </html>

@@ -50,8 +50,13 @@ class FridayClient {
     // Settings Modal
     this.settingsModal = document.getElementById("settings-modal");
     this.providersList = document.getElementById("providers-list");
+    this.providersSegmentedNav = document.getElementById("providers-segmented-nav");
+    this.voiceCardsGrid = document.getElementById("voice-cards-grid");
     this.voicePickerSelect = document.getElementById("voice-picker-select");
     this.applyVoiceBtn = document.getElementById("apply-voice-btn");
+    this.selectedProviderId = null;
+    this.cachedProvidersData = null;
+    this.activeVoiceProfile = null;
 
     this.init();
   }
@@ -741,6 +746,26 @@ class FridayClient {
       if (e.target === this.settingsModal) this.closeSettingsModal();
     });
 
+    // Modal tabs navigation
+    document.querySelectorAll(".modal-tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tabTarget = btn.getAttribute("data-tab");
+        document.querySelectorAll(".modal-tab-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        document.querySelectorAll(".tab-pane").forEach((pane) => {
+          pane.classList.remove("active");
+          if (pane.id === tabTarget) {
+            pane.classList.add("active");
+          }
+        });
+
+        if (tabTarget === "tab-telemetry") {
+          this.updateTelemetryTab();
+        }
+      });
+    });
+
     // Top pill view buttons
     document.getElementById("fit-graph-btn")?.addEventListener("click", () => {
       if (this.galaxy) this.galaxy.fitView();
@@ -832,9 +857,14 @@ class FridayClient {
       this.hudModelText.textContent = `${state.brain.model.toUpperCase()}`;
     }
 
-    if (state.voice && this.voicePickerSelect) {
-      this.renderVoicePicker(state.voice.available_voices, state.voice.voice_name);
+    if (state.voice) {
+      if (this.voicePickerSelect) {
+        this.renderVoicePicker(state.voice.available_voices, state.voice.voice_name);
+      }
+      this.renderVoiceCards(state.voice.available_voices, state.voice.voice_name);
     }
+
+    this.updateTelemetryTab();
   }
 
   renderVoicePicker(availableVoices, activeVoice) {
@@ -847,6 +877,164 @@ class FridayClient {
       if (voice === activeVoice) opt.selected = true;
       this.voicePickerSelect.appendChild(opt);
     });
+  }
+
+  renderVoiceCards(availableVoices, activeVoice) {
+    if (!this.voiceCardsGrid) return;
+    this.voiceCardsGrid.innerHTML = "";
+    this.activeVoiceProfile = activeVoice;
+
+    const voiceMeta = {
+      "FRIDAY (Local Irish)": {
+        name: "F.R.I.D.A.Y. (Irish Female)",
+        tag: "CANONICAL STARK AI",
+        actor: "Kerry Condon Timbre",
+        engine: "macOS Local Moira (en_IE) · 185 WPM",
+        desc: "Tactical, quick-witted female Irish voice with zero latency and offline execution.",
+        avatarBg: "rgba(56, 189, 248, 0.15)",
+        avatarColor: "#38bdf8",
+      },
+      "FRIDAY (Moira)": {
+        name: "F.R.I.D.A.Y. (Alternative Moira)",
+        tag: "HIGH VELOCITY",
+        actor: "Celtic Acoustic Timbre",
+        engine: "macOS Local (en_IE) · 190 WPM",
+        desc: "Fast-cadence Irish voice optimized for telemetry readout and rapid diagnostics.",
+        avatarBg: "rgba(56, 189, 248, 0.15)",
+        avatarColor: "#38bdf8",
+      },
+      "Jarvis (Daniel)": {
+        name: "J.A.R.V.I.S. (Daniel UK)",
+        tag: "BRITISH CLASSIC",
+        actor: "Paul Bettany Cadence",
+        engine: "macOS Local Speech Synth (Daniel)",
+        desc: "Traditional UK English male assistant voice for classic Stark butler dialogue.",
+        avatarBg: "rgba(168, 85, 247, 0.15)",
+        avatarColor: "#c084fc",
+      },
+      "Daniel": {
+        name: "Daniel (Local UK Classic)",
+        tag: "BRITISH FORMAL",
+        actor: "Traditional UK Assistant",
+        engine: "macOS Local Speech Synth",
+        desc: "Classic British English male voice for standard offline dialogue and alerts.",
+        avatarBg: "rgba(168, 85, 247, 0.15)",
+        avatarColor: "#c084fc",
+      },
+      "Samantha (Local)": {
+        name: "Samantha (macOS Natural)",
+        tag: "NATURAL AMERICAN",
+        actor: "Conversational US",
+        engine: "macOS Local Speech Synth",
+        desc: "Standard natural American female assistant voice with warm, balanced pitch.",
+        avatarBg: "rgba(234, 179, 8, 0.15)",
+        avatarColor: "#facc15",
+      },
+      "Samantha": {
+        name: "Samantha (macOS Natural)",
+        tag: "NATURAL AMERICAN",
+        actor: "Conversational US",
+        engine: "macOS Local Speech Synth",
+        desc: "Standard natural American female assistant voice with warm, balanced pitch.",
+        avatarBg: "rgba(234, 179, 8, 0.15)",
+        avatarColor: "#facc15",
+      },
+      "Jarvis (Cloud ElevenLabs)": {
+        name: "J.A.R.V.I.S. (Cloud Neural)",
+        tag: "NEURAL STUDIO QUALITY",
+        actor: "Paul Bettany Timbre",
+        engine: "ElevenLabs Streaming API",
+        desc: "Refined, eloquent British male neural timbre running through cloud synthesis.",
+        avatarBg: "rgba(56, 189, 248, 0.15)",
+        avatarColor: "#38bdf8",
+      },
+    };
+
+    const voicesToDisplay = (availableVoices && availableVoices.length > 0)
+      ? availableVoices
+      : Object.keys(voiceMeta);
+
+    voicesToDisplay.forEach((vId) => {
+      const meta = voiceMeta[vId] || {
+        name: vId,
+        tag: "CUSTOM VOICE",
+        actor: "System Synth",
+        engine: "System Audio Engine",
+        desc: "Configured speech synthesizer profile.",
+        avatarBg: "rgba(148, 163, 184, 0.15)",
+        avatarColor: "#94a3b8",
+      };
+
+      const isActive = (vId === activeVoice);
+
+      const card = document.createElement("div");
+      card.className = `voice-card ${isActive ? "active-voice" : ""}`;
+      card.innerHTML = `
+        <div>
+          <div class="voice-card-top">
+            <div class="voice-card-identity">
+              <div class="voice-card-avatar" style="background:${meta.avatarBg}; color:${meta.avatarColor};">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                </svg>
+              </div>
+              <div>
+                <div class="voice-card-name">${meta.name}</div>
+                <div class="voice-card-tag">${meta.tag}</div>
+              </div>
+            </div>
+            ${isActive ? '<span class="voice-active-badge">● ACTIVE</span>' : ''}
+          </div>
+          <p class="voice-card-desc">${meta.desc}</p>
+        </div>
+        <div class="voice-card-bottom">
+          <span class="voice-card-meta">${meta.engine}</span>
+          <button type="button" class="voice-select-pill">
+            ${isActive ? 'Active Identity' : 'Switch Voice'}
+          </button>
+        </div>
+      `;
+
+      card.addEventListener("click", async () => {
+        if (vId === this.activeVoiceProfile) return;
+        await this.switchVoice(vId);
+        if (this.voicePickerSelect) {
+          this.voicePickerSelect.value = vId;
+        }
+        this.renderVoiceCards(voicesToDisplay, vId);
+      });
+
+      this.voiceCardsGrid.appendChild(card);
+    });
+  }
+
+  updateTelemetryTab() {
+    const brainNameEl = document.getElementById("telemetry-brain-name");
+    const brainModelEl = document.getElementById("telemetry-brain-model");
+    const voiceNameEl = document.getElementById("telemetry-voice-name");
+    const voiceEngineEl = document.getElementById("telemetry-voice-engine");
+    const nodesCountEl = document.getElementById("telemetry-nodes-count");
+
+    if (this.systemState?.brain) {
+      if (brainNameEl) brainNameEl.textContent = (this.systemState.brain.provider || "OpenRouter").toUpperCase();
+      if (brainModelEl) brainModelEl.textContent = this.systemState.brain.model || "Unknown";
+    }
+
+    if (this.systemState?.voice) {
+      if (voiceNameEl) voiceNameEl.textContent = this.systemState.voice.voice_name || "FRIDAY (Local Irish)";
+      if (voiceEngineEl) {
+        const isEleven = (this.systemState.voice.voice_name || "").includes("ElevenLabs");
+        voiceEngineEl.textContent = isEleven
+          ? "ElevenLabs Cloud Neural API"
+          : "Local macOS Speech Synthesis (Moira en_IE, 185 WPM)";
+      }
+    }
+
+    if (nodesCountEl && this.galaxy?.graphData?.nodes) {
+      nodesCountEl.textContent = `${this.galaxy.graphData.nodes.length} Nodes Indexed`;
+    }
   }
 
   appendMessage(role, content) {
@@ -1228,6 +1416,10 @@ class FridayClient {
 
   async openSettingsModal() {
     this.settingsModal.classList.remove("hidden");
+    if (this.systemState?.voice) {
+      this.renderVoiceCards(this.systemState.voice.available_voices, this.systemState.voice.voice_name);
+    }
+    this.updateTelemetryTab();
     await this.loadProvidersSettings();
   }
 
@@ -1247,210 +1439,255 @@ class FridayClient {
   }
 
   renderProvidersList(providers, activeProvId, currentModel) {
-    this.providersList.innerHTML = "";
+    this.cachedProvidersData = { providers, activeProvId, currentModel };
+    if (!this.providersList) return;
 
-    providers.forEach((p) => {
-      const card = document.createElement("div");
-      card.className = `provider-card ${p.id === activeProvId ? "active-card" : ""}`;
+    if (!this.selectedProviderId || !providers.some((p) => p.id === this.selectedProviderId)) {
+      this.selectedProviderId = activeProvId || (providers[0] ? providers[0].id : null);
+    }
 
-      const totalCount = p.total_models_count || p.models?.length || 0;
-      const freeCount = p.free_models_count || 0;
+    // 1. Render Segmented Provider Navigation Chips
+    if (this.providersSegmentedNav) {
+      this.providersSegmentedNav.innerHTML = "";
+      providers.forEach((p) => {
+        const isSelected = p.id === this.selectedProviderId;
+        const isCurrentActiveBrain = p.id === activeProvId;
+        const totalCount = p.total_models_count || p.models?.length || 0;
 
-      const head = document.createElement("div");
-      head.className = "provider-head";
-      head.innerHTML = `
-        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.4rem;">
-          <span class="provider-title">${p.name}</span>
-          <span style="font-size:0.75rem; color:${p.is_configured ? '#10b981' : '#f43f5e'};">
-            ${p.is_configured ? '● Configured' : '○ Missing Key'}
-          </span>
-          ${totalCount > 0 ? `<span class="model-count-badge">${totalCount} Models</span>` : ''}
-          ${freeCount > 0 ? `<span class="free-badge">🎁 ${freeCount} Free</span>` : ''}
-        </div>
-      `;
-      card.appendChild(head);
-
-      const modelContainer = document.createElement("div");
-      modelContainer.className = "model-selector-container";
-
-      const filterRow = document.createElement("div");
-      filterRow.className = "model-filter-row";
-
-      const searchInput = document.createElement("input");
-      searchInput.type = "text";
-      searchInput.className = "model-filter-input";
-      searchInput.placeholder = `🔍 Search ${totalCount} models (e.g. 'free', 'claude', 'deepseek', 'llama')...`;
-
-      const allBtn = document.createElement("button");
-      allBtn.className = "model-filter-btn active";
-      allBtn.textContent = `All (${totalCount})`;
-
-      const freeBtn = document.createElement("button");
-      freeBtn.className = "model-filter-btn";
-      freeBtn.textContent = `🎁 Free Only (${freeCount})`;
-
-      filterRow.appendChild(searchInput);
-      if (freeCount > 0) {
-        filterRow.appendChild(allBtn);
-        filterRow.appendChild(freeBtn);
-      }
-      modelContainer.appendChild(filterRow);
-
-      const select = document.createElement("select");
-      select.className = "model-select-dropdown";
-
-      const modelsDetails = p.models_details && p.models_details.length > 0 
-        ? p.models_details 
-        : p.models.map(m => ({ id: m, name: m, is_free: m.includes(":free") }));
-
-      let filterFreeOnly = false;
-      let filterQuery = "";
-
-      const populateOptions = () => {
-        select.innerHTML = "";
-        const query = filterQuery.toLowerCase().trim();
-
-        const filtered = modelsDetails.filter((m) => {
-          if (filterFreeOnly && !m.is_free) return false;
-          if (query) {
-            return m.id.toLowerCase().includes(query) || (m.name && m.name.toLowerCase().includes(query));
-          }
-          return true;
-        });
-
-        const freeGroup = filtered.filter(m => m.is_free);
-        const regularGroup = filtered.filter(m => !m.is_free);
-
-        if (freeGroup.length > 0) {
-          const optGroup = document.createElement("optgroup");
-          optGroup.label = `🎁 Free Models (Zero API Cost) — ${freeGroup.length} available`;
-          freeGroup.forEach((m) => {
-            const opt = document.createElement("option");
-            opt.value = m.id;
-            opt.textContent = `[FREE] ${m.name || m.id}`;
-            if (p.id === activeProvId && m.id === currentModel) opt.selected = true;
-            optGroup.appendChild(opt);
-          });
-          select.appendChild(optGroup);
-        }
-
-        if (regularGroup.length > 0) {
-          const optGroup = document.createElement("optgroup");
-          optGroup.label = `⚡ Commercial & Flagship Models — ${regularGroup.length} available`;
-          regularGroup.forEach((m) => {
-            const opt = document.createElement("option");
-            opt.value = m.id;
-            opt.textContent = `${m.name || m.id}`;
-            if (p.id === activeProvId && m.id === currentModel) opt.selected = true;
-            optGroup.appendChild(opt);
-          });
-          select.appendChild(optGroup);
-        }
-
-        if (filtered.length === 0) {
-          const opt = document.createElement("option");
-          opt.textContent = "No models matching filter";
-          opt.disabled = true;
-          select.appendChild(opt);
-        }
-      };
-
-      populateOptions();
-
-      searchInput.addEventListener("input", (e) => {
-        filterQuery = e.target.value;
-        populateOptions();
-      });
-
-      allBtn.addEventListener("click", () => {
-        filterFreeOnly = false;
-        allBtn.classList.add("active");
-        freeBtn.classList.remove("active");
-        populateOptions();
-      });
-
-      freeBtn.addEventListener("click", () => {
-        filterFreeOnly = true;
-        freeBtn.classList.add("active");
-        allBtn.classList.remove("active");
-        populateOptions();
-      });
-
-      modelContainer.appendChild(select);
-
-      const actionsRow = document.createElement("div");
-      actionsRow.className = "model-actions-row";
-
-      const activateBtn = document.createElement("button");
-      activateBtn.className = `action-btn ${p.id === activeProvId ? "primary" : ""}`;
-      activateBtn.textContent = p.id === activeProvId ? "Active Brain" : "Activate Selected Model";
-      activateBtn.addEventListener("click", async () => {
-        if (!select.value || select.value === "No models matching filter") return;
-        await this.switchProvider(p.id, select.value);
-      });
-
-      const testBtn = document.createElement("button");
-      testBtn.className = "action-btn";
-      testBtn.textContent = "Test Link with Selected";
-      testBtn.addEventListener("click", async () => {
-        if (!select.value || select.value === "No models matching filter") return;
-        testBtn.textContent = "Testing...";
-        const tRes = await fetch("/api/providers/test", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider_id: p.id, model: select.value }),
-        });
-        const tData = await tRes.json();
-        alert(`[${p.name}] ${tData.success ? 'Success' : 'Failed'}: ${tData.message}`);
-        testBtn.textContent = "Test Link with Selected";
-      });
-
-      actionsRow.appendChild(activateBtn);
-      actionsRow.appendChild(testBtn);
-      modelContainer.appendChild(actionsRow);
-      card.appendChild(modelContainer);
-
-      if (p.id !== "ollama_local") {
-        const keyRow = document.createElement("div");
-        keyRow.className = "key-input-row";
-        keyRow.innerHTML = `
-          <input type="password" placeholder="${p.masked_key ? 'Key configured: ' + p.masked_key : 'Paste API Key here...'}" id="key-input-${p.id}">
-          <button class="action-btn" id="save-key-btn-${p.id}">Save Key & Discover Models</button>
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = `provider-chip-btn ${isSelected ? "active" : ""} ${isCurrentActiveBrain ? "is-active-brain" : ""}`;
+        chip.innerHTML = `
+          <span class="provider-chip-dot ${p.is_configured ? 'online' : 'offline'}"></span>
+          <span>${p.name}</span>
+          ${totalCount > 0 ? `<span style="font-size:0.68rem; color:#64748b; font-family:var(--font-mono);">(${totalCount})</span>` : ''}
+          ${isCurrentActiveBrain ? '<span style="font-size:0.62rem; color:#38bdf8; font-family:var(--font-mono); margin-left:2px; font-weight:700;">[ACTIVE]</span>' : ''}
         `;
-        card.appendChild(keyRow);
 
-        setTimeout(() => {
-          const saveBtn = document.getElementById(`save-key-btn-${p.id}`);
-          const input = document.getElementById(`key-input-${p.id}`);
-          if (saveBtn && input) {
-            saveBtn.addEventListener("click", async () => {
-              const newKey = input.value.trim();
-              if (!newKey) return;
-              saveBtn.textContent = "Discovering Models...";
-              saveBtn.disabled = true;
-              try {
-                const res = await fetch("/api/providers/key", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ provider_id: p.id, api_key: newKey }),
-                });
-                const rData = await res.json();
-                input.value = "";
-                await this.loadProvidersSettings();
-                alert(`${rData.message}\nModels catalog dynamically updated!`);
-              } catch (err) {
-                alert(`Error saving key: ${err.message}`);
-              } finally {
-                saveBtn.textContent = "Save Key & Discover Models";
-                saveBtn.disabled = false;
-              }
-            });
-          }
-        }, 0);
+        chip.addEventListener("click", () => {
+          this.selectedProviderId = p.id;
+          this.renderProvidersList(providers, activeProvId, currentModel);
+        });
+
+        this.providersSegmentedNav.appendChild(chip);
+      });
+    }
+
+    // 2. Render Single Focused Workspace for the Selected Provider
+    this.providersList.innerHTML = "";
+    const p = providers.find((x) => x.id === this.selectedProviderId) || providers[0];
+    if (!p) return;
+
+    const isCurrentActive = (p.id === activeProvId);
+    const card = document.createElement("div");
+    card.className = `provider-card ${isCurrentActive ? "active-card" : ""}`;
+
+    const totalCount = p.total_models_count || p.models?.length || 0;
+    const freeCount = p.free_models_count || 0;
+
+    const head = document.createElement("div");
+    head.className = "provider-head";
+    head.innerHTML = `
+      <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <span class="provider-title">${p.name}</span>
+        <span style="font-size:0.75rem; font-weight:500; color:${p.is_configured ? '#10b981' : '#f43f5e'};">
+          ${p.is_configured ? '● Configured & Ready' : '○ Needs API Key'}
+        </span>
+        ${totalCount > 0 ? `<span class="model-count-badge">${totalCount} Models</span>` : ''}
+        ${freeCount > 0 ? `<span class="free-badge">🎁 ${freeCount} Free</span>` : ''}
+      </div>
+      <div>
+        ${isCurrentActive ? '<span class="free-badge" style="background:rgba(56,189,248,0.18); border-color:rgba(56,189,248,0.4); color:#38bdf8;">ACTIVE BRAIN</span>' : ''}
+      </div>
+    `;
+    card.appendChild(head);
+
+    const modelContainer = document.createElement("div");
+    modelContainer.className = "model-selector-container";
+
+    const filterRow = document.createElement("div");
+    filterRow.className = "model-filter-row";
+
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.className = "model-filter-input";
+    searchInput.placeholder = `🔍 Search ${totalCount} models (e.g. 'free', 'claude', 'deepseek', 'llama')...`;
+
+    const allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.className = "model-filter-btn active";
+    allBtn.textContent = `All (${totalCount})`;
+
+    const freeBtn = document.createElement("button");
+    freeBtn.type = "button";
+    freeBtn.className = "model-filter-btn";
+    freeBtn.textContent = `🎁 Free Only (${freeCount})`;
+
+    filterRow.appendChild(searchInput);
+    if (freeCount > 0) {
+      filterRow.appendChild(allBtn);
+      filterRow.appendChild(freeBtn);
+    }
+    modelContainer.appendChild(filterRow);
+
+    const select = document.createElement("select");
+    select.className = "model-select-dropdown";
+
+    const modelsDetails = p.models_details && p.models_details.length > 0 
+      ? p.models_details 
+      : p.models.map(m => ({ id: m, name: m, is_free: m.includes(":free") }));
+
+    let filterFreeOnly = false;
+    let filterQuery = "";
+
+    const populateOptions = () => {
+      select.innerHTML = "";
+      const query = filterQuery.toLowerCase().trim();
+
+      const filtered = modelsDetails.filter((m) => {
+        if (filterFreeOnly && !m.is_free) return false;
+        if (query) {
+          return m.id.toLowerCase().includes(query) || (m.name && m.name.toLowerCase().includes(query));
+        }
+        return true;
+      });
+
+      const freeGroup = filtered.filter(m => m.is_free);
+      const regularGroup = filtered.filter(m => !m.is_free);
+
+      if (freeGroup.length > 0) {
+        const optGroup = document.createElement("optgroup");
+        optGroup.label = `🎁 Free Models (Zero API Cost) — ${freeGroup.length} available`;
+        freeGroup.forEach((m) => {
+          const opt = document.createElement("option");
+          opt.value = m.id;
+          opt.textContent = `[FREE] ${m.name || m.id}`;
+          if (p.id === activeProvId && m.id === currentModel) opt.selected = true;
+          optGroup.appendChild(opt);
+        });
+        select.appendChild(optGroup);
       }
 
-      this.providersList.appendChild(card);
+      if (regularGroup.length > 0) {
+        const optGroup = document.createElement("optgroup");
+        optGroup.label = `⚡ Commercial & Flagship Models — ${regularGroup.length} available`;
+        regularGroup.forEach((m) => {
+          const opt = document.createElement("option");
+          opt.value = m.id;
+          opt.textContent = `${m.name || m.id}`;
+          if (p.id === activeProvId && m.id === currentModel) opt.selected = true;
+          optGroup.appendChild(opt);
+        });
+        select.appendChild(optGroup);
+      }
+
+      if (filtered.length === 0) {
+        const opt = document.createElement("option");
+        opt.textContent = "No models matching filter";
+        opt.disabled = true;
+        select.appendChild(opt);
+      }
+    };
+
+    populateOptions();
+
+    searchInput.addEventListener("input", (e) => {
+      filterQuery = e.target.value;
+      populateOptions();
     });
+
+    allBtn.addEventListener("click", () => {
+      filterFreeOnly = false;
+      allBtn.classList.add("active");
+      freeBtn.classList.remove("active");
+      populateOptions();
+    });
+
+    freeBtn.addEventListener("click", () => {
+      filterFreeOnly = true;
+      freeBtn.classList.add("active");
+      allBtn.classList.remove("active");
+      populateOptions();
+    });
+
+    modelContainer.appendChild(select);
+
+    const actionsRow = document.createElement("div");
+    actionsRow.className = "model-actions-row";
+
+    const activateBtn = document.createElement("button");
+    activateBtn.type = "button";
+    activateBtn.className = `action-btn ${isCurrentActive ? "primary" : ""}`;
+    activateBtn.textContent = isCurrentActive ? "Active Brain" : "Activate Selected Model";
+    activateBtn.addEventListener("click", async () => {
+      if (!select.value || select.value === "No models matching filter") return;
+      activateBtn.textContent = "Activating...";
+      await this.switchProvider(p.id, select.value);
+    });
+
+    const testBtn = document.createElement("button");
+    testBtn.type = "button";
+    testBtn.className = "action-btn";
+    testBtn.textContent = "Test Link with Selected";
+    testBtn.addEventListener("click", async () => {
+      if (!select.value || select.value === "No models matching filter") return;
+      testBtn.textContent = "Testing...";
+      const tRes = await fetch("/api/providers/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider_id: p.id, model: select.value }),
+      });
+      const tData = await tRes.json();
+      alert(`[${p.name}] ${tData.success ? 'Success' : 'Failed'}: ${tData.message}`);
+      testBtn.textContent = "Test Link with Selected";
+    });
+
+    actionsRow.appendChild(activateBtn);
+    actionsRow.appendChild(testBtn);
+    modelContainer.appendChild(actionsRow);
+    card.appendChild(modelContainer);
+
+    if (p.id !== "ollama_local") {
+      const keyRow = document.createElement("div");
+      keyRow.className = "key-input-row";
+      keyRow.innerHTML = `
+        <input type="password" placeholder="${p.masked_key ? 'Key configured: ' + p.masked_key : 'Paste API Key here...'}" id="key-input-${p.id}">
+        <button class="action-btn" type="button" id="save-key-btn-${p.id}">Save Key & Discover Models</button>
+      `;
+      card.appendChild(keyRow);
+
+      setTimeout(() => {
+        const saveBtn = document.getElementById(`save-key-btn-${p.id}`);
+        const input = document.getElementById(`key-input-${p.id}`);
+        if (saveBtn && input) {
+          saveBtn.addEventListener("click", async () => {
+            const newKey = input.value.trim();
+            if (!newKey) return;
+            saveBtn.textContent = "Discovering Models...";
+            saveBtn.disabled = true;
+            try {
+              const res = await fetch("/api/providers/key", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ provider_id: p.id, api_key: newKey }),
+              });
+              const rData = await res.json();
+              input.value = "";
+              await this.loadProvidersSettings();
+              alert(`${rData.message}\nModels catalog dynamically updated!`);
+            } catch (err) {
+              alert(`Error saving key: ${err.message}`);
+            } finally {
+              saveBtn.textContent = "Save Key & Discover Models";
+              saveBtn.disabled = false;
+            }
+          });
+        }
+      }, 0);
+    }
+
+    this.providersList.appendChild(card);
+  }
   }
 
   async switchProvider(providerId, model) {

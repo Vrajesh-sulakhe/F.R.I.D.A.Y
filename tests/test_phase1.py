@@ -4,10 +4,11 @@ dialogue persona, and API server endpoints.
 """
 import pytest
 from pathlib import Path
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from src.main import app, llm_manager
-from src.llm import ChatMessage, TokenTracker
+from src.llm import ChatMessage, TokenTracker, StreamChunk
 
 client = TestClient(app)
 
@@ -212,6 +213,9 @@ async def test_fallback_notification_only_once():
     orig_prov = llm_manager.active_provider_id
     orig_model = llm_manager.active_model
 
+    async def mock_stream(*args, **kwargs):
+        yield StreamChunk(content="Mocked response from fallback", finish_reason="stop")
+
     try:
         # Set primary to non-running local model to trigger fallback to OpenRouter
         llm_manager.fallback_chain = ["openrouter"]
@@ -219,24 +223,25 @@ async def test_fallback_notification_only_once():
         llm_manager.set_active_provider_and_model("ollama_local", "non_existent_model_123")
         llm_manager._last_reported_brain = None
 
-        # First stream should announce fallback
-        chunks1 = []
-        async for chunk in llm_manager.chat_stream_with_fallback(
-            messages=[ChatMessage(role="user", content="Hi")]
-        ):
-            chunks1.append(chunk.content)
-        full_text1 = "".join(chunks1)
-        # Switched text is present in the first fallback
-        assert "[Switched to fallback brain" in full_text1
+        with patch.object(llm_manager.providers["openrouter"], "chat_stream", side_effect=mock_stream):
+            # First stream should announce fallback
+            chunks1 = []
+            async for chunk in llm_manager.chat_stream_with_fallback(
+                messages=[ChatMessage(role="user", content="Hi")]
+            ):
+                chunks1.append(chunk.content)
+            full_text1 = "".join(chunks1)
+            # Switched text is present in the first fallback
+            assert "[Switched to fallback brain" in full_text1
 
-        # Second stream should NOT announce fallback because provider is already switched
-        chunks2 = []
-        async for chunk in llm_manager.chat_stream_with_fallback(
-            messages=[ChatMessage(role="user", content="Next message")]
-        ):
-            chunks2.append(chunk.content)
-        full_text2 = "".join(chunks2)
-        assert "[Switched to fallback brain" not in full_text2
+            # Second stream should NOT announce fallback because provider is already switched
+            chunks2 = []
+            async for chunk in llm_manager.chat_stream_with_fallback(
+                messages=[ChatMessage(role="user", content="Next message")]
+            ):
+                chunks2.append(chunk.content)
+            full_text2 = "".join(chunks2)
+            assert "[Switched to fallback brain" not in full_text2
     finally:
         llm_manager.set_active_provider_and_model(orig_prov, orig_model)
 
