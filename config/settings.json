@@ -1,6 +1,6 @@
 {
-  "active_provider": "ollama_local",
-  "active_model": "qwen3.5:9b",
+  "active_provider": "nvidia_nim",
+  "active_model": "nvidia/nemotron-3.5-lightning-30b-a3b",
   "active_voice": "FRIDAY (Local Irish)",
   "voice_engine": "voice_studio",
   "temperature": 0.7,
