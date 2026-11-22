@@ -510,6 +510,69 @@ class GalaxyGraph {
     return matchCount;
   }
 
+  pulseByQuery(query, durationMs = 1400) {
+    const q = (query || "").toLowerCase().trim();
+    const matched = [];
+    this.nodes.forEach((n) => {
+      const name = (n.userData.name || "").toLowerCase();
+      const cat = (n.userData.category || "").toLowerCase();
+      const hub = (n.userData.hub || "").toLowerCase();
+      if (!q || name.includes(q) || cat.includes(q) || hub.includes(q) || (q.includes("friday") && hub.includes("brain"))) {
+        matched.push({ mesh: n, origScale: n.scale.x, origOpacity: n.material.opacity });
+        n.material.opacity = 1.0;
+        n.scale.setScalar(Math.max(n.scale.x * 1.8, 7.0));
+      }
+    });
+    if (matched.length > 0) {
+      setTimeout(() => {
+        matched.forEach((item) => {
+          item.mesh.material.opacity = item.origOpacity;
+          item.mesh.scale.setScalar(item.origScale);
+        });
+      }, durationMs);
+    }
+    return matched.length;
+  }
+
+  addDynamicMemoryNode(mem) {
+    if (!mem || !this.scene || !window.THREE) return;
+    const parentHub = this.nodes.find((n) => n.userData.hub_id === "hub_memory_vault" || n.userData.name === "Memory Vault") || this.nodes[0];
+    if (!parentHub) return;
+
+    const hubPos = parentHub.position;
+    const radius = 25 + Math.random() * 55;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(Math.random() * 2 - 1);
+
+    const nodeGeo = new THREE.SphereGeometry(1, 16, 16);
+    const nodeMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 1.0 });
+    const nodeMesh = new THREE.Mesh(nodeGeo, nodeMat);
+    nodeMesh.scale.setScalar(4.8);
+    nodeMesh.position.set(
+      hubPos.x + radius * Math.sin(phi) * Math.cos(theta),
+      hubPos.y + radius * Math.sin(phi) * Math.sin(theta),
+      hubPos.z + radius * Math.cos(phi)
+    );
+    nodeMesh.userData = {
+      id: mem.id,
+      name: mem.topic,
+      type: `Memory (${mem.category || "Fact"})`,
+      category: "Brain",
+      path: `memory://${mem.id}`,
+      hub: "Memory Vault",
+      is_app: false,
+      is_dir: false,
+      summary: mem.content,
+      hubMesh: parentHub,
+    };
+
+    this.nodeGroup.add(nodeMesh);
+    this.nodes.push(nodeMesh);
+    this.edges.push({ start: parentHub, end: nodeMesh, color: 0x22d3ee });
+    this.createEdgeLines();
+    this.pulseByQuery(mem.topic, 1800);
+  }
+
   onWindowResize() {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;

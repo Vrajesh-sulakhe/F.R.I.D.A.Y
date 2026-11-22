@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=8">
+  <link rel="stylesheet" href="/static/css/style.css?v=10">
 
   <!-- Three.js & OrbitControls for 3D Second Brain Galaxy Graph -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -141,8 +141,17 @@
       </div>
       <div class="toggle-row">
         <span class="toggle-name">REFLEX</span>
-        <span class="toggle-status-dim">hidden</span>
+        <span class="toggle-status-dim" id="reflex-status-label">armed</span>
       </div>
+    </div>
+
+    <!-- WATCH Webcam PiP Widget (shown when WATCH toggle is ON) -->
+    <div id="watch-pip-container" class="hud-card watch-pip-card hidden">
+      <div class="watch-pip-header">
+        <span class="card-label" style="margin-bottom:0;">WATCH CAM</span>
+        <span class="badge-dot pulse-emerald"></span>
+      </div>
+      <video id="watch-video" autoplay muted playsinline class="watch-video-preview"></video>
     </div>
   </aside>
 
@@ -304,6 +313,15 @@
           </svg>
           <span>System Telemetry</span>
         </button>
+
+        <button type="button" class="modal-tab-btn" data-tab="tab-os-ops">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <span>Tools &amp; OS</span>
+        </button>
       </div>
 
       <!-- Tab Panes Container -->
@@ -362,8 +380,52 @@
             </div>
             <div class="telemetry-card">
               <span class="telemetry-label">FALLBACK RESILIENCE</span>
-              <div class="telemetry-val" style="color: #10b981;">Armed & Ready</div>
-              <div class="telemetry-sub">Ollama Local &rarr; OpenRouter Cloud</div>
+              <div class="telemetry-val" style="color: #10b981;">Armed &amp; Ready</div>
+              <div class="telemetry-sub" id="telemetry-session-usage">0 reqs · 0 tokens · $0.0000</div>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">PERCEPTION &amp; REFLEX</span>
+              <div class="telemetry-val" id="telemetry-vision-state">EYES off · FOCUS off</div>
+              <div class="telemetry-sub" id="telemetry-reflex-state">REFLEX armed · 0 queued</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: TOOLS, MCP, MEMORY & MISSIONS -->
+        <div id="tab-os-ops" class="tab-pane">
+          <div class="os-ops-grid">
+            <div class="os-card">
+              <div class="os-card-head">
+                <span class="telemetry-label">MCP BRIDGES &amp; REGISTERED TOOLS</span>
+                <button type="button" id="reload-mcp-btn" class="action-btn secondary" style="padding:0.25rem 0.6rem; font-size:0.72rem;">Rescan MCP</button>
+              </div>
+              <div id="mcp-servers-list" class="os-list"></div>
+              <div id="agent-tools-list" class="os-tools-pills"></div>
+            </div>
+
+            <div class="os-card">
+              <div class="os-card-head">
+                <span class="telemetry-label">SECOND BRAIN MEMORY VAULT</span>
+              </div>
+              <div class="os-inline-form">
+                <input type="text" id="mem-topic-input" placeholder="Topic (e.g. Deploy)" class="os-input">
+                <input type="text" id="mem-content-input" placeholder="Fact or preference..." class="os-input" style="flex:2;">
+                <button type="button" id="add-memory-btn" class="action-btn primary" style="padding:0.35rem 0.65rem; font-size:0.72rem;">Save</button>
+              </div>
+              <div id="memories-list" class="os-list"></div>
+            </div>
+
+            <div class="os-card" style="grid-column: 1 / -1;">
+              <div class="os-card-head">
+                <span class="telemetry-label">AUTONOMOUS MISSIONS &amp; REFLEX BRIEFINGS</span>
+                <button type="button" id="run-briefing-btn" class="action-btn secondary" style="padding:0.25rem 0.6rem; font-size:0.72rem;">Run Briefing</button>
+              </div>
+              <div class="os-inline-form">
+                <input type="text" id="mission-title-input" placeholder="Mission Title" class="os-input">
+                <input type="text" id="mission-goal-input" placeholder="Multi-step goal..." class="os-input" style="flex:2;">
+                <button type="button" id="create-mission-btn" class="action-btn primary" style="padding:0.35rem 0.65rem; font-size:0.72rem;">Queue</button>
+              </div>
+              <div id="missions-list" class="os-list"></div>
             </div>
           </div>
         </div>
@@ -389,7 +451,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="/static/js/graph.js?v=8"></script>
-  <script src="/static/js/app.js?v=8"></script>
+  <script src="/static/js/graph.js?v=10"></script>
+  <script src="/static/js/app.js?v=10"></script>
 </body>
 </html>

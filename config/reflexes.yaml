@@ -1,0 +1,24 @@
+reflexes:
+  - id: system_vitals
+    name: "System Vitals Watch"
+    kind: system_vitals
+    interval_seconds: 120
+    enabled: true
+    params:
+      min_disk_free_gb: 5.0
+      max_load_1m: 10.0
+      min_battery_pct: 15
+
+  - id: git_workspace
+    name: "Workspace Git Drift Watch"
+    kind: git_workspace
+    interval_seconds: 300
+    enabled: true
+    params:
+      dirty_threshold: 12
+
+  - id: tactical_briefing
+    name: "On-Demand Tactical Briefing"
+    kind: briefing
+    interval_seconds: 86400
+    enabled: false

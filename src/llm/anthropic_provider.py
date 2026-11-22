@@ -84,10 +84,29 @@ class AnthropicProvider(LLMProvider):
                     "content": content_blocks if content_blocks else msg.content or "",
                 })
             else:
-                converted.append({
-                    "role": "user",
-                    "content": msg.content or "",
-                })
+                if msg.images:
+                    blocks: list[dict[str, Any]] = [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": img.mime_type,
+                                "data": img.base64_data,
+                            },
+                        }
+                        for img in msg.images
+                    ]
+                    if msg.content:
+                        blocks.append({"type": "text", "text": msg.content})
+                    converted.append({
+                        "role": "user",
+                        "content": blocks,
+                    })
+                else:
+                    converted.append({
+                        "role": "user",
+                        "content": msg.content or "",
+                    })
 
         return system_prompt, converted
 

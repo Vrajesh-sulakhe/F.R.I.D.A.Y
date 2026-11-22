@@ -20,6 +20,7 @@ from .base import (
 )
 from .openai_compatible import OpenAICompatibleProvider
 from .anthropic_provider import AnthropicProvider
+from .router import ModelRouter, infer_model_capabilities
 
 logger = logging.getLogger("FRIDAY.LLMManager")
 
@@ -47,6 +48,7 @@ class LLMManager:
         self.available_voices: list[str] = ["FRIDAY (Local Irish)", "FRIDAY (Moira)", "Samantha (Local)", "Jarvis (Daniel)"]
 
         self.load_configurations()
+        self.router = ModelRouter(self)
 
     def load_configurations(self) -> None:
         """Load and parse providers.yaml, personality.yaml, and settings.json."""
@@ -193,12 +195,22 @@ class LLMManager:
                             prompt_p, comp_p = 1.0, 1.0
 
                         is_free = ":free" in mid.lower() or (prompt_p == 0.0 and comp_p == 0.0)
+                        caps = infer_model_capabilities(
+                            "openrouter",
+                            mid,
+                            {
+                                "is_free": is_free,
+                                "architecture": m.get("architecture", {}),
+                                "supported_parameters": m.get("supported_parameters", []),
+                            },
+                        )
 
                         item = {
                             "id": mid,
                             "name": name,
                             "is_free": is_free,
                             "context_length": m.get("context_length", 0),
+                            "capabilities": caps.model_dump(),
                         }
                         if is_free:
                             free_models.append(item)
@@ -286,12 +298,14 @@ class LLMManager:
                             disp_name = f"{org}: {mname}" if org else mname
 
                         # All build.nvidia.com models accessible via the developer integrate endpoint are Free Endpoints
+                        caps = infer_model_capabilities("nvidia_nim", mid, {"is_free": True})
                         item = {
                             "id": mid,
                             "name": disp_name,
                             "is_free": True,
                             "owned_by": m.get("owned_by", ""),
                             "endpoint_type": "Free Endpoint",
+                            "capabilities": caps.model_dump(),
                         }
 
                         # Prioritize popular/flagship models
@@ -523,9 +537,17 @@ class LLMManager:
             self.set_active_voice("FRIDAY (Cloud ElevenLabs)", "elevenlabs")
             return True, "Cloud voice engaged, Boss. Crisp and ready."
 
-        # Mac App Launcher command: "open <app>", "launch <app>", "can you open <app>"
-        app_match = re.search(r"(?:can you open|open up|open|launch|start|run)\s+([a-zA-Z0-9_\-\.\s]+)", text)
-        if app_match and not any(k in text for k in ["local", "cloud", "brain", "voice", "model", "site", "openrouter", "teardown", "reverse engineer"]):
+        # Fast-path Mac App Launcher command: short single-intent "open <app>" or "launch <app>"
+        app_match = re.match(
+            r"^(?:friday[,\s]+|jarvis[,\s]+)?(?:please\s+|can you\s+)?(?:open up|open|launch)\s+([a-zA-Z0-9_\-\.\s]+?)(?:\s+for me|\s+please|\s+app)?$",
+            text,
+        )
+        _non_app_hints = (
+            "local", "cloud", "brain", "voice", "model", "site", "openrouter",
+            "teardown", "reverse engineer", " and ", " then ", " file", " folder",
+            " with ", " from ", " to ", " using ",
+        )
+        if app_match and not any(k in text for k in _non_app_hints):
             target_app = app_match.group(1).strip()
             target_app = re.sub(r"\b(the|for me|app|please)\b", "", target_app).strip()
             if target_app:

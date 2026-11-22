@@ -202,10 +202,10 @@ def _format_size(size_bytes: int) -> str:
 
 class SecondBrainIndexer:
     @staticmethod
-    def scan_local_machine() -> dict[str, Any]:
+    def scan_local_machine(memory_store: Any = None, mcp_manager: Any = None) -> dict[str, Any]:
         """
-        Scans local directories and installed applications on macOS.
-        Builds a comprehensive, interconnected 3D galaxy graph of user's files and apps.
+        Scans local directories, installed applications, SQLite memories, and MCP bridges on macOS.
+        Builds a comprehensive, interconnected 3D galaxy graph of the user's machine and Second Brain.
         """
         hubs_out = []
         nodes_out = []
@@ -375,6 +375,75 @@ class SecondBrainIndexer:
                 "count": len(child_nodes),
                 "path": str(path),
                 "pos": {"x": pos[0], "y": pos[1], "z": pos[2]},
+            })
+
+        # Virtual Hub: SQLite Semantic Memory Vault
+        if memory_store is not None:
+            memories = memory_store.list_recent(limit=40)
+            mem_hub_id = "hub_memory_vault"
+            mem_hub_name = "Memory Vault"
+            for mem in memories:
+                cat = "Brain"
+                category_counts[cat] = category_counts.get(cat, 0) + 1
+                nodes_out.append({
+                    "id": mem["id"],
+                    "name": mem["topic"],
+                    "type": f"Memory ({mem['category']})",
+                    "category": cat,
+                    "path": f"memory://{mem['id']}",
+                    "hub": mem_hub_name,
+                    "hub_id": mem_hub_id,
+                    "is_app": False,
+                    "is_dir": False,
+                    "size_human": f"Imp {mem['importance']}/5",
+                    "mtime": mem["created_at"][:10],
+                    "summary": mem["content"],
+                    "is_text_readable": False,
+                })
+            hubs_out.append({
+                "id": mem_hub_id,
+                "name": mem_hub_name,
+                "category": "Brain",
+                "color": 0x22d3ee,
+                "count": len(memories),
+                "path": str(memory_store.db_path),
+                "pos": {"x": -110, "y": 30, "z": 170},
+            })
+
+        # Virtual Hub: MCP Bridges
+        if mcp_manager is not None:
+            mcp_servers = mcp_manager.list_servers_status()
+            mcp_hub_id = "hub_mcp_bridges"
+            mcp_hub_name = "MCP Bridges"
+            mcp_count = 0
+            for srv in mcp_servers:
+                for tname in srv.get("tools") or [srv["name"]]:
+                    cat = "Config"
+                    category_counts[cat] = category_counts.get(cat, 0) + 1
+                    nodes_out.append({
+                        "id": f"mcp_{srv['name']}_{tname}",
+                        "name": tname,
+                        "type": f"MCP ({srv['name']})",
+                        "category": cat,
+                        "path": f"mcp://{srv['name']}/{tname}",
+                        "hub": mcp_hub_name,
+                        "hub_id": mcp_hub_id,
+                        "is_app": False,
+                        "is_dir": False,
+                        "size_human": "connected" if srv["connected"] else "disabled",
+                        "mtime": "Live",
+                        "summary": f"MCP Bridge tool '{tname}' exposed by server '{srv['name']}'.",
+                        "is_text_readable": False,
+                    })
+                    mcp_count += 1
+            hubs_out.append({
+                "id": mcp_hub_id,
+                "name": mcp_hub_name,
+                "category": "Config",
+                "color": 0xf59e0b,
+                "count": mcp_count,
+                "path": str(mcp_manager.config_path),
+                "pos": {"x": 110, "y": -40, "z": -170},
             })
 
         return {

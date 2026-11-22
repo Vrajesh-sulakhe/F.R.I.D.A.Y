@@ -51,7 +51,17 @@ class OpenAICompatibleProvider(LLMProvider):
         formatted = []
         for msg in messages:
             item: dict[str, Any] = {"role": msg.role}
-            if msg.content is not None:
+            if msg.images:
+                parts: list[dict[str, Any]] = []
+                if msg.content:
+                    parts.append({"type": "text", "text": msg.content})
+                for img in msg.images:
+                    parts.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{img.mime_type};base64,{img.base64_data}"},
+                    })
+                item["content"] = parts
+            elif msg.content is not None:
                 item["content"] = msg.content
             if msg.name:
                 item["name"] = msg.name

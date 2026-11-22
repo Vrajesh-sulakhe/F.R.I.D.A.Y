@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/vrajeshsulakhe/Documents"],
+      "enabled": false,
+      "description": "Local filesystem MCP server (set enabled: true to connect)"
+    },
+    "github": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {},
+      "enabled": false,
+      "description": "GitHub MCP server (requires GITHUB_PERSONAL_ACCESS_TOKEN and enabled: true)"
+    }
+  }
+}

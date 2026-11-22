@@ -762,8 +762,52 @@ class FridayClient {
 
         if (tabTarget === "tab-telemetry") {
           this.updateTelemetryTab();
+        } else if (tabTarget === "tab-os-ops") {
+          this.loadOsOpsTab();
         }
       });
+    });
+
+    document.getElementById("reload-mcp-btn")?.addEventListener("click", async () => {
+      await fetch("/api/mcp/reload", { method: "POST" });
+      await this.loadOsOpsTab();
+    });
+
+    document.getElementById("run-briefing-btn")?.addEventListener("click", async () => {
+      await fetch("/api/reflex/trigger/tactical_briefing", { method: "POST" });
+      await this.loadOsOpsTab();
+    });
+
+    document.getElementById("add-memory-btn")?.addEventListener("click", async () => {
+      const topicEl = document.getElementById("mem-topic-input");
+      const contentEl = document.getElementById("mem-content-input");
+      const topic = topicEl?.value.trim();
+      const content = contentEl?.value.trim();
+      if (!topic || !content) return;
+      await fetch("/api/memories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic, content, category: "UserNote", importance: 4 }),
+      });
+      topicEl.value = "";
+      contentEl.value = "";
+      await this.loadOsOpsTab();
+    });
+
+    document.getElementById("create-mission-btn")?.addEventListener("click", async () => {
+      const titleEl = document.getElementById("mission-title-input");
+      const goalEl = document.getElementById("mission-goal-input");
+      const title = titleEl?.value.trim();
+      const goal = goalEl?.value.trim();
+      if (!title || !goal) return;
+      await fetch("/api/missions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, goal }),
+      });
+      titleEl.value = "";
+      goalEl.value = "";
+      await this.loadOsOpsTab();
     });
 
     // Top pill view buttons
@@ -796,16 +840,92 @@ class FridayClient {
     });
 
     // HUD Toggles (Eyes, Watch, Holo, Focus)
+    this.watchEnabled = false;
+    this.watchStream = null;
+    this.watchVideo = document.getElementById("watch-video");
+    this.watchPipContainer = document.getElementById("watch-pip-container");
+
     document.querySelectorAll(".toggle-switch-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
         const toggleName = btn.getAttribute("data-toggle");
         const isActive = btn.classList.toggle("active");
         btn.textContent = isActive ? "on" : "off";
+
         if (toggleName === "holo" && this.galaxy) {
           this.galaxy.nodeGroup.visible = isActive;
+        } else if (toggleName === "watch") {
+          await this.setWatchEnabled(isActive, btn);
+        }
+
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+          this.socket.send(JSON.stringify({
+            action: "toggle_state",
+            toggle: toggleName,
+            enabled: isActive,
+          }));
         }
       });
     });
+  }
+
+  async setWatchEnabled(enabled, btnEl = null) {
+    if (!enabled) {
+      this.watchEnabled = false;
+      if (this.watchStream) {
+        this.watchStream.getTracks().forEach((t) => t.stop());
+        this.watchStream = null;
+      }
+      if (this.watchVideo) this.watchVideo.srcObject = null;
+      if (this.watchPipContainer) this.watchPipContainer.classList.add("hidden");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.appendMessage("assistant", "Camera API unavailable in this browser context.");
+      if (btnEl) {
+        btnEl.classList.remove("active");
+        btnEl.textContent = "off";
+      }
+      return;
+    }
+
+    try {
+      this.watchStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 360 } },
+        audio: false,
+      });
+      if (this.watchVideo) this.watchVideo.srcObject = this.watchStream;
+      if (this.watchPipContainer) this.watchPipContainer.classList.remove("hidden");
+      this.watchEnabled = true;
+      if (this.reactorSubstatus) this.reactorSubstatus.textContent = "WATCH camera active, sir.";
+    } catch (e) {
+      this.watchEnabled = false;
+      if (btnEl) {
+        btnEl.classList.remove("active");
+        btnEl.textContent = "off";
+      }
+      this.appendMessage("assistant", `WATCH camera denied or unavailable: ${e.message || e.name}`);
+    }
+  }
+
+  captureWatchFrame() {
+    if (!this.watchEnabled || !this.watchVideo || this.watchVideo.readyState < 2) {
+      return null;
+    }
+    const vw = this.watchVideo.videoWidth || 640;
+    const vh = this.watchVideo.videoHeight || 360;
+    const maxW = 640;
+    const w = vw > maxW ? maxW : vw;
+    const h = Math.round(vh * (w / vw));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(this.watchVideo, 0, 0, w, h);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+    const base64 = dataUrl.split(",")[1] || "";
+    if (!base64) return null;
+    return { base64_data: base64, mime_type: "image/jpeg", label: "watch_camera" };
   }
 
   connectWebSocket() {
@@ -1018,8 +1138,29 @@ class FridayClient {
     const nodesCountEl = document.getElementById("telemetry-nodes-count");
 
     if (this.systemState?.brain) {
-      if (brainNameEl) brainNameEl.textContent = (this.systemState.brain.provider || "OpenRouter").toUpperCase();
+      if (brainNameEl) brainNameEl.textContent = (this.systemState.brain.provider_name || this.systemState.brain.provider_id || "Active").toUpperCase();
       if (brainModelEl) brainModelEl.textContent = this.systemState.brain.model || "Unknown";
+    }
+
+    if (this.systemState?.telemetry) {
+      const t = this.systemState.telemetry;
+      const usageEl = document.getElementById("telemetry-session-usage");
+      if (usageEl) {
+        usageEl.textContent = `${t.requests || 0} reqs · ${t.total_tokens || 0} tokens · $${Number(t.total_cost_usd || 0).toFixed(4)} · ${t.avg_latency_ms || 0}ms avg`;
+      }
+    }
+
+    if (this.systemState?.vision || this.systemState?.reflex) {
+      const v = this.systemState.vision || {};
+      const r = this.systemState.reflex || {};
+      const vEl = document.getElementById("telemetry-vision-state");
+      const rEl = document.getElementById("telemetry-reflex-state");
+      if (vEl) {
+        vEl.textContent = `EYES ${v.eyes_enabled ? "ON" : "off"} · FOCUS ${v.focus_enabled ? "ON" : "off"}`;
+      }
+      if (rEl) {
+        rEl.textContent = `REFLEX ${r.running ? "active" : "armed"} · ${r.queued_count || 0} queued`;
+      }
     }
 
     if (this.systemState?.voice) {
@@ -1045,11 +1186,81 @@ class FridayClient {
     this.messagesStream.appendChild(msg);
     this.messagesStream.scrollTop = this.messagesStream.scrollHeight;
 
-    // Prune old floating messages
-    while (this.messagesStream.children.length > 5) {
-      this.messagesStream.removeChild(this.messagesStream.firstChild);
+    // Prune old floating messages (preserve active pending approvals)
+    while (this.messagesStream.children.length > 7) {
+      const first = this.messagesStream.firstChild;
+      if (first && first.dataset && first.dataset.pendingApproval === "1") break;
+      this.messagesStream.removeChild(first);
     }
     return msg;
+  }
+
+  appendAgentTrace(label, statusText, isOk = null) {
+    const trace = document.createElement("div");
+    trace.className = "floating-msg agent-trace";
+    const statusClass = isOk === null ? "pending" : (isOk ? "ok" : "err");
+    trace.innerHTML = `<span class="trace-dot ${statusClass}"></span><span class="trace-label">${this.escapeHtml(label)}</span><span class="trace-meta">${this.escapeHtml(statusText)}</span>`;
+    this.messagesStream.appendChild(trace);
+    this.messagesStream.scrollTop = this.messagesStream.scrollHeight;
+    while (this.messagesStream.children.length > 7) {
+      const first = this.messagesStream.firstChild;
+      if (first && first.dataset && first.dataset.pendingApproval === "1") break;
+      this.messagesStream.removeChild(first);
+    }
+  }
+
+  appendApprovalCard(data) {
+    const card = document.createElement("div");
+    card.className = "floating-msg approval-card";
+    card.dataset.pendingApproval = "1";
+
+    const argsPreview = typeof data.arguments === "string"
+      ? data.arguments
+      : JSON.stringify(data.arguments || {});
+    const tierLabel = (data.risk_tier || "confirm").toUpperCase();
+
+    card.innerHTML = `
+      <div class="approval-header">
+        <span class="approval-badge tier-${this.escapeHtml((data.risk_tier || 'confirm').toLowerCase())}">${this.escapeHtml(tierLabel)} GATE</span>
+        <span class="approval-tool">${this.escapeHtml(data.tool_name)}</span>
+      </div>
+      <div class="approval-args">${this.escapeHtml(argsPreview)}</div>
+      <div class="approval-actions">
+        <button type="button" class="approval-btn approve">Approve</button>
+        <button type="button" class="approval-btn deny">Deny</button>
+      </div>
+    `;
+
+    const approveBtn = card.querySelector(".approval-btn.approve");
+    const denyBtn = card.querySelector(".approval-btn.deny");
+
+    const decide = (approved) => {
+      approveBtn.disabled = true;
+      denyBtn.disabled = true;
+      card.dataset.pendingApproval = "0";
+      card.querySelector(".approval-actions").innerHTML = `<span class="approval-decided ${approved ? 'ok' : 'err'}">${approved ? '✓ Approved' : '✕ Denied'}</span>`;
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({
+          action: "tool_approval_response",
+          request_id: data.request_id,
+          approved,
+        }));
+      }
+    };
+
+    approveBtn.addEventListener("click", () => decide(true));
+    denyBtn.addEventListener("click", () => decide(false));
+
+    this.messagesStream.appendChild(card);
+    this.messagesStream.scrollTop = this.messagesStream.scrollHeight;
+  }
+
+  escapeHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   formatMarkdown(md) {
@@ -1150,8 +1361,8 @@ class FridayClient {
     if (tdTarget) {
       this.isStreaming = true;
       this.reactorSubstatus.textContent = "REA is reading the code";
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({
           action: "teardown",
           target: tdTarget,
         }));
@@ -1267,19 +1478,23 @@ class FridayClient {
 
 
     // Send via WebSocket or HTTP
+    const watchFrame = this.captureWatchFrame();
+    const attachedImages = watchFrame ? [watchFrame] : [];
+
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.isStreaming = true;
       this.socket.send(JSON.stringify({
         action: "chat",
         message: text,
+        images: attachedImages,
         session_history: this.sessionHistory.slice(-10),
       }));
     } else {
-      await this.sendChatHttp(text);
+      await this.sendChatHttp(text, attachedImages);
     }
   }
 
-  async sendChatHttp(text) {
+  async sendChatHttp(text, attachedImages = []) {
     try {
       this.isStreaming = true;
       const res = await fetch("/api/chat", {
@@ -1287,6 +1502,7 @@ class FridayClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
+          images: attachedImages,
           session_history: this.sessionHistory.slice(-10),
         }),
       });
@@ -1365,9 +1581,70 @@ class FridayClient {
         this.reactorSubstatus.textContent = "standing by, sir.";
         break;
 
+      case "agent_plan":
+        if (this.reactorSubstatus && data.message) {
+          this.reactorSubstatus.textContent = data.message;
+        }
+        break;
+
+      case "tool_start":
+        if (this.reactorSubstatus) {
+          this.reactorSubstatus.textContent = `running ${data.tool_name}...`;
+        }
+        this.appendAgentTrace(data.tool_name, `step ${data.step} • ${data.risk_tier}`, null);
+        if (this.galaxy) this.galaxy.pulseByQuery(data.tool_name);
+        break;
+
+      case "tool_approval_request":
+        if (this.reactorSubstatus) {
+          this.reactorSubstatus.textContent = `awaiting approval: ${data.tool_name}`;
+        }
+        this.appendApprovalCard(data);
+        break;
+
+      case "approval_voice_ack": {
+        const pendingCard = this.messagesStream?.querySelector('.approval-card[data-pending-approval="1"]');
+        if (pendingCard) {
+          pendingCard.dataset.pendingApproval = "0";
+          const actionsEl = pendingCard.querySelector(".approval-actions");
+          if (actionsEl) {
+            actionsEl.innerHTML = `<span class="approval-decided ${data.approved ? 'ok' : 'err'}">${data.approved ? '✓ Approved via Voice' : '✕ Denied via Voice'}</span>`;
+          }
+        }
+        break;
+      }
+
+      case "tool_result":
+        this.appendAgentTrace(data.tool_name, data.ok ? "done" : "declined/failed", data.ok);
+        if (this.galaxy) this.galaxy.pulseByQuery(data.tool_name, 900);
+        break;
+
+      case "memory_added":
+        if (this.galaxy && data.memory) {
+          this.galaxy.addDynamicMemoryNode(data.memory);
+        }
+        break;
+
+      case "reflex_alert": {
+        const rfxEl = document.getElementById("reflex-status-label");
+        if (rfxEl) {
+          rfxEl.textContent = "alert";
+          setTimeout(() => { rfxEl.textContent = "armed"; }, 6000);
+        }
+        if (data.message) {
+          this.appendAgentTrace(`REFLEX: ${data.title || "Alert"}`, data.message, data.priority !== "critical");
+          this.speakResponse(data.message);
+        }
+        break;
+      }
+
+      case "toggle_ack":
+        if (data.state) this.applyDynamicState(data.state);
+        break;
+
       case "stream_start":
         this.currentAccumulatedText = "";
-        this.reactorSubstatus.textContent = `streaming from ${data.model}...`;
+        this.reactorSubstatus.textContent = `thinking (${data.model})...`;
         break;
 
       case "stream_chunk":
@@ -1561,7 +1838,12 @@ class FridayClient {
         freeGroup.forEach((m) => {
           const opt = document.createElement("option");
           opt.value = m.id;
-          opt.textContent = `[FREE] ${m.name || m.id}`;
+          const capTags = [
+            m.capabilities?.vision ? "👁" : "",
+            m.capabilities?.tools ? "🔧" : "",
+            m.capabilities?.reasoning ? "🧠" : "",
+          ].filter(Boolean).join("");
+          opt.textContent = `[FREE${capTags ? " " + capTags : ""}] ${m.name || m.id}`;
           if (p.id === activeProvId && m.id === currentModel) opt.selected = true;
           optGroup.appendChild(opt);
         });
@@ -1574,7 +1856,12 @@ class FridayClient {
         regularGroup.forEach((m) => {
           const opt = document.createElement("option");
           opt.value = m.id;
-          opt.textContent = `${m.name || m.id}`;
+          const capTags = [
+            m.capabilities?.vision ? "👁" : "",
+            m.capabilities?.tools ? "🔧" : "",
+            m.capabilities?.reasoning ? "🧠" : "",
+          ].filter(Boolean).join("");
+          opt.textContent = `${capTags ? "[" + capTags + "] " : ""}${m.name || m.id}`;
           if (p.id === activeProvId && m.id === currentModel) opt.selected = true;
           optGroup.appendChild(opt);
         });
@@ -1706,6 +1993,68 @@ class FridayClient {
       }
     } catch (e) {
       alert(`Switch error: ${e.message}`);
+    }
+  }
+
+  async loadOsOpsTab() {
+    try {
+      const [toolsRes, mcpRes, memRes, msnRes] = await Promise.all([
+        fetch("/api/tools"),
+        fetch("/api/mcp/servers"),
+        fetch("/api/memories?limit=15"),
+        fetch("/api/missions"),
+      ]);
+
+      const toolsData = toolsRes.ok ? await toolsRes.json() : { agent_tools: [] };
+      const mcpData = mcpRes.ok ? await mcpRes.json() : { servers: [] };
+      const memData = memRes.ok ? await memRes.json() : { memories: [] };
+      const msnData = msnRes.ok ? await msnRes.json() : { missions: [] };
+
+      const mcpListEl = document.getElementById("mcp-servers-list");
+      if (mcpListEl) {
+        mcpListEl.innerHTML = (mcpData.servers || []).map((s) =>
+          `<div class="os-item"><span><strong>${this.escapeHtml(s.name)}</strong> (${s.transport})</span><span class="tier-pill tier-${s.connected ? 'safe' : 'confirm'}">${s.connected ? `${s.tool_count} tools` : (s.enabled ? 'offline' : 'disabled')}</span></div>`
+        ).join("") || '<div class="os-empty">No MCP servers configured in config/mcp_servers.json</div>';
+      }
+
+      const toolsEl = document.getElementById("agent-tools-list");
+      if (toolsEl) {
+        toolsEl.innerHTML = (toolsData.agent_tools || []).map((t) =>
+          `<span class="os-tool-chip" title="${this.escapeHtml(t.description)}">${this.escapeHtml(t.name)} <em class="tier-pill tier-${this.escapeHtml(t.risk_tier)}">${this.escapeHtml(t.risk_tier)}</em></span>`
+        ).join("");
+      }
+
+      const memEl = document.getElementById("memories-list");
+      if (memEl) {
+        memEl.innerHTML = (memData.memories || []).map((m) =>
+          `<div class="os-item"><span><strong>${this.escapeHtml(m.topic)}</strong>: ${this.escapeHtml(m.content)}</span><button type="button" class="os-del-btn" data-mem-id="${this.escapeHtml(m.id)}">&times;</button></div>`
+        ).join("") || '<div class="os-empty">No persisted memories yet.</div>';
+
+        memEl.querySelectorAll(".os-del-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            await fetch(`/api/memories/${encodeURIComponent(btn.dataset.memId)}`, { method: "DELETE" });
+            await this.loadOsOpsTab();
+          });
+        });
+      }
+
+      const msnEl = document.getElementById("missions-list");
+      if (msnEl) {
+        msnEl.innerHTML = (msnData.missions || []).map((m) =>
+          `<div class="os-item"><span><strong>${this.escapeHtml(m.title)}</strong> <small>(${this.escapeHtml(m.status)})</small> — ${this.escapeHtml((m.last_summary || m.goal).slice(0, 90))}</span><button type="button" class="action-btn primary os-run-msn-btn" data-msn-id="${this.escapeHtml(m.id)}" style="padding:0.2rem 0.55rem; font-size:0.7rem;">Run</button></div>`
+        ).join("") || '<div class="os-empty">No autonomous missions queued yet.</div>';
+
+        msnEl.querySelectorAll(".os-run-msn-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            btn.textContent = "Running...";
+            btn.disabled = true;
+            await fetch(`/api/missions/${encodeURIComponent(btn.dataset.msnId)}/run`, { method: "POST" });
+            await this.loadOsOpsTab();
+          });
+        });
+      }
+    } catch (e) {
+      console.warn("Failed loading Tools & OS tab:", e);
     }
   }
 }

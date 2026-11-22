@@ -24,3 +24,6 @@ scratch/
 dist/
 node_modules/
 src/web/snapshots/*.png
+data/*.db
+data/*.db-*
+rea/

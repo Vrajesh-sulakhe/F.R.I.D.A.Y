@@ -6,6 +6,24 @@ from typing import AsyncIterator, Any
 from pydantic import BaseModel, Field
 
 
+class ImageAttachment(BaseModel):
+    """Base64-encoded visual context attached to a chat message."""
+
+    base64_data: str
+    mime_type: str = "image/jpeg"
+    label: str | None = None
+
+
+class ModelCapabilities(BaseModel):
+    """Inferred runtime capabilities for BYOK model routing."""
+
+    vision: bool = False
+    tools: bool = False
+    reasoning: bool = False
+    is_free: bool = False
+    tier: str = "balanced"  # "fast" | "balanced" | "frontier"
+
+
 class ToolFunctionCall(BaseModel):
     id: str = ""
     name: str
@@ -18,6 +36,7 @@ class ChatMessage(BaseModel):
     name: str | None = None
     tool_call_id: str | None = None
     tool_calls: list[ToolFunctionCall] = Field(default_factory=list)
+    images: list[ImageAttachment] = Field(default_factory=list)
 
 
 class ToolDefinition(BaseModel):
